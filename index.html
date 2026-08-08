@@ -198,6 +198,33 @@
   #uploadStatus.err { color: var(--red); }
   #uploadStatus.busy { color: var(--text-dim); }
 
+  #loginOverlay {
+    position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .login-card {
+    max-width: 320px; width: 100%; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 16px; padding: 30px 24px; text-align: center;
+  }
+  .login-card h2 { font-size: 17px; font-weight: 800; margin: 0 0 6px; }
+  .login-card .sub { font-size: 12px; color: var(--text-dim); margin: 0 0 20px; }
+  .login-card input[type="text"], .login-card input[type="password"] {
+    width: 100%; background: var(--panel-2); border: 1.5px solid var(--line); border-radius: 10px;
+    padding: 11px 14px; font-size: 15px; font-family: 'Tajawal', sans-serif; color: var(--text);
+    outline: none; margin-bottom: 10px; box-sizing: border-box;
+  }
+  .login-card input:focus { border-color: var(--accent); }
+  .login-remember {
+    display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim);
+    margin: 4px 0 16px; justify-content: center;
+  }
+  .login-btn {
+    width: 100%; background: var(--accent); color: #14181c; border: none; border-radius: 10px;
+    padding: 12px; font-size: 15px; font-weight: 800; font-family: 'Tajawal', sans-serif;
+    cursor: pointer;
+  }
+  .login-error { color: var(--red); font-size: 12.5px; margin-top: 10px; display: none; }
+
   footer {
     text-align: center; color: var(--text-dim); font-size: 11px; padding: 20px 16px 30px;
     border-top: 1px solid var(--line); margin-top: 10px; line-height: 1.9;
@@ -205,6 +232,64 @@
 </style>
 </head>
 <body>
+<div id="loginOverlay" style="">
+  <div class="login-card">
+    <h2>🔒 تسجيل الدخول</h2>
+    <p class="sub">أدخل اسم المستخدم وكلمة المرور للمتابعة</p>
+    <input type="text" id="loginUser" placeholder="اسم المستخدم" autocomplete="off" autocapitalize="off">
+    <input type="password" id="loginPass" placeholder="كلمة المرور">
+    <label class="login-remember"><input type="checkbox" id="rememberMe" checked=""> تذكرني على هذا الجهاز</label>
+    <button class="login-btn" id="loginBtn" type="button">دخول</button>
+    <div class="login-error" id="loginError" style="display: none;">❌ اسم المستخدم أو كلمة المرور غير صحيحة</div>
+  </div>
+</div>
+<script>
+(function() {
+  const USERS = {"hani": "haniogm", "mohammad h": "mohammadogm", "heeba": "heebaogm", "nor": "norogm", "ziad": "ziadogm", "khoulod": "khoulodogm", "momar": "momarogm", "user": "userogm"};
+  const ATTENDANCE_LOG_URL = "https://script.google.com/macros/s/AKfycbzRodFyDGxY4pSzRroQrCfzeXvtCoTapMdCeaprTdMU4FPu_S9C6j-H6PDBj330Gu3C/exec";
+  const STORAGE_KEY = "ogm_search_user";
+
+  function logVisit(name) {
+    if (!ATTENDANCE_LOG_URL || ATTENDANCE_LOG_URL.indexOf("PASTE_") === 0) return;
+    try {
+      fetch(ATTENDANCE_LOG_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ name: name })
+      });
+    } catch (e) { /* ignore network errors, don't block the user */ }
+  }
+
+  function grantAccess(name) {
+    document.getElementById("loginOverlay").style.display = "none";
+    logVisit(name);
+  }
+
+  const remembered = localStorage.getItem(STORAGE_KEY);
+  if (remembered && USERS[remembered] !== undefined) {
+    grantAccess(remembered);
+  }
+
+  document.getElementById("loginBtn").addEventListener("click", function() {
+    const u = document.getElementById("loginUser").value.trim();
+    const p = document.getElementById("loginPass").value;
+    const remember = document.getElementById("rememberMe").checked;
+    const errEl = document.getElementById("loginError");
+    if (USERS[u] !== undefined && USERS[u] === p) {
+      errEl.style.display = "none";
+      if (remember) localStorage.setItem(STORAGE_KEY, u);
+      grantAccess(u);
+    } else {
+      errEl.style.display = "block";
+    }
+  });
+
+  document.getElementById("loginPass").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") document.getElementById("loginBtn").click();
+  });
+})();
+</script>
 <noscript>
   <div style="background:#e5535a;color:#fff;text-align:center;padding:14px;font-family:sans-serif;font-size:14px;">
     البحث لا يعمل لأن المتصفح لم يشغّل JavaScript. افتح هذا الملف من متصفح حقيقي (Chrome أو Safari) وليس من داخل معاينة واتساب — اضغط على الملف ثم اختر "فتح باستخدام" / "Open in Browser".
@@ -240,7 +325,7 @@
     <div class="stat bz"><div class="num mono" id="statBz">144</div><div class="lbl">إجمالي عملاء البنزين</div></div>
   </div>
 
-  <div id="lastUpdated">آخر تحديث: 07/08/2026</div>
+  <div id="lastUpdated">آخر تحديث: 08/08/2026</div>
 
   <div class="upload-row">
     <div class="upload-item">
@@ -776,6 +861,9 @@ function handleFile(file) {
 
 function commitAndDownload() {
   try {
+    const overlayEl = document.getElementById('loginOverlay');
+    const prevOverlayDisplay = overlayEl.style.display;
+    overlayEl.style.display = '';
     const scriptEl = document.getElementById('mainScript');
     let src = scriptEl.textContent;
     src = src.replace(/let DATA = [\s\S]*?;\n/, 'let DATA = ' + JSON.stringify(DATA) + ';\n');
@@ -784,6 +872,7 @@ function commitAndDownload() {
     scriptEl.textContent = src;
 
     const fullHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    overlayEl.style.display = prevOverlayDisplay;
     const blob = new Blob([fullHtml], {type: 'text/html;charset=utf-8'});
     const url = URL.createObjectURL(blob);
     const now = new Date();
