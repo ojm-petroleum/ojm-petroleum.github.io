@@ -286,10 +286,10 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       if(e&&e.code==='23505') return 'هذه اليومية موجودة مسبقاً. اضغط تحديث ثم عدّلها.';
       return m;
     },
-    page:async function(table,select,order){
+    page:async function(table,select,order,filter){
       var out=[], from=0, size=1000;
       for(;;){
-        var q=sb.from(table).select(select); order.forEach(function(o){ q=q.order(o); });
+        var q=sb.from(table).select(select); if(filter) q=filter(q); order.forEach(function(o){ q=q.order(o); });
         var r=await q.range(from,from+size-1);
         if(r.error) throw r.error;
         out=out.concat(r.data); if(r.data.length<size) break; from+=size;
@@ -308,17 +308,23 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
           tanks:r[2].data.filter(function(t){return t.station_id===x.id;}).map(function(t){ return {id:t.id,fuel:t.fuel,cap:t.cap,opening:t.opening,alert:t.alert}; })}; })};
       dirty();
     },
-    loadEntries:async function(){
-      var rows=await DB.page('entries','station_id,day,sales,recv,dip,submitted_at,version',['station_id','day']);
-      var vers=await DB.page('entry_versions','id,station_id,day,data,reason,edited_at',['id']);
-      var E={};
-      cfg.stations.forEach(function(s){ E[s.id]={}; });
+    loadEntries:async function(since){
+      var flt=since?function(q){ return q.gte('day',since); }:null;
+      var rows=await DB.page('entries','station_id,day,sales,recv,dip,submitted_at,version',['station_id','day'],flt);
+      var vers=await DB.page('entry_versions','id,station_id,day,data,reason,edited_at',['id'],flt);
+      var E=since?entries:{};
+      Object.keys(E).forEach(function(id){ if(!byId(id)) delete E[id]; });
+      cfg.stations.forEach(function(s){
+        if(!since||!E[s.id]) E[s.id]={};
+        else Object.keys(E[s.id]).forEach(function(d){ if(d>=since) delete E[s.id][d]; });
+      });
       rows.forEach(function(r){ if(!E[r.station_id]) E[r.station_id]={}; E[r.station_id][r.day]={sales:r.sales||{},recv:r.recv||{},dip:r.dip||{},time:bTimeOf(r.submitted_at),versions:[]}; });
       vers.forEach(function(v){ var e=E[v.station_id]&&E[v.station_id][v.day]; if(!e) return;
         e.versions.push({on:bDateOf(v.edited_at),at:bTimeOf(v.edited_at),by:'',reason:v.reason,snap:{sales:v.data.sales||{},recv:v.data.recv||{},dip:v.data.dip||{}}}); });
       entries=E; dirty();
     },
     loadAll:async function(){ await DB.loadConfig(); await DB.loadEntries(); },
+    loadRecent:async function(){ await DB.loadConfig(); await DB.loadEntries(addDays(today(),-3)); },
     saveConfig:async function(nc){
       var oldS=cfg.stations.map(function(s){return s.id;}), newS=nc.stations.map(function(s){return s.id;});
       var oldT=[]; cfg.stations.forEach(function(s){ s.tanks.forEach(function(t){ oldT.push(t.id); }); });
@@ -1037,7 +1043,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
   async function refresh(silent){
     var bar=document.getElementById('netbar');
-    try{ await DB.loadAll(); bar.hidden=true; updateHeader(); go(location.hash.replace('#','')); }
+    try{ await DB.loadRecent(); bar.hidden=true; updateHeader(); go(location.hash.replace('#','')); }
     catch(e){ bar.textContent='تعذّر التحديث: '+DB.errText(e); bar.hidden=false; }
   }
   document.getElementById('lform').addEventListener('submit',async function(ev){
