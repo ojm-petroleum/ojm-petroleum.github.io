@@ -195,7 +195,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
   function num(v){ v=norm(v); if(v==='') return null; if(!/^\d+$/.test(v)) return NaN; return parseInt(v,10); }
   function pad(n){ return ('0'+n).slice(-2); }
-  function nowHM(){ return new Date().toLocaleTimeString('en-GB',{timeZone:'Asia/Beirut',hour:'2-digit',minute:'2-digit'}); }
+  function nowHM(){ return bTimeOf(new Date().toISOString()); }
   function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function groupOf(f){ f=String(f); for(var i=0;i<GROUPS.length;i++){ if(f.indexOf(GROUPS[i].k)===0) return GROUPS[i].k; } return null; }
   function ds(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
@@ -216,7 +216,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   function tankLabel(st,t){ var n=0; for(var i=0;i<st.tanks.length;i++){ if(st.tanks[i].fuel===t.fuel){ n++; if(st.tanks[i]===t) break; } } return t.fuel+' · خزان '+n; }
   function lvlT(p,t){ return p<t.alert/200?'crit':(p<t.alert/100?'warn':'ok'); }
   function barCls(p,t){ var l=lvlT(p,t); return l==='ok'?'':l; }
-  function today(){ return new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Beirut'}); }
+  function today(){ return bDateOf(new Date().toISOString()); }
 
   /* ---------- سجل الأيام ---------- */
   function dates(sid){ if(!idx[sid]) idx[sid]=Object.keys(entries[sid]||{}).sort(); return idx[sid]; }
@@ -271,9 +271,10 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   var sb=window.supabase.createClient(SB_URL,SB_KEY);
   var ROLE=null, UID=null, MY_STATION=null, MY_NAME='', ALLOWED=[];
   var ROLE_LABEL={manager:'المدير',distribution:'مسؤول التوزيع',station:'مدير المحطة'};
-  function bDateOf(iso){ return new Date(iso).toLocaleDateString('en-CA',{timeZone:'Asia/Beirut'}); }
-  function bTimeOf(iso){ return new Date(iso).toLocaleTimeString('en-GB',{timeZone:'Asia/Beirut',hour:'2-digit',minute:'2-digit'}); }
-  function bHour(){ return parseInt(new Date().toLocaleString('en-GB',{timeZone:'Asia/Beirut',hour:'2-digit',hour12:false}),10)%24; }
+  function bParts(d){ var o={}; new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Beirut',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d).forEach(function(p){ o[p.type]=p.value; }); return o; }
+  function bDateOf(iso){ var o=bParts(new Date(iso)); return o.year+'-'+o.month+'-'+o.day; }
+  function bTimeOf(iso){ var o=bParts(new Date(iso)); return o.hour.replace('24','00')+':'+o.minute; }
+  function bHour(){ return parseInt(bParts(new Date()).hour,10)%24; }
   var cfg={fuels:[],tol:null,deadline:null,fill:null,daysAlert:null,stations:[]}, entries={}, drafts={}, idx={};
 
   var DB={
