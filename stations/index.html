@@ -56,7 +56,7 @@ a{color:var(--accent)}
 .grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:start}
 input:disabled,select:disabled{opacity:.6;cursor:not-allowed}
 label{display:block;font-weight:500;font-size:14px;margin-bottom:4px}
-input[type=text],select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;min-height:42px}
+input[type=text],input[type=date],select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 11px;min-height:42px}
 input.num-in{font-family:var(--font-num);direction:ltr;text-align:left}
 input.invalid{border-color:var(--crit)}
 .err{color:var(--crit);font-size:13px;margin-top:3px}
@@ -181,6 +181,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 (function(){
   var GROUPS=[{k:'بنزين',t:'البنزين',c:1},{k:'مازوت',t:'المازوت',c:2},{k:'غاز',t:'الغاز',c:3}];
@@ -393,6 +394,9 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   /* ---------- المستخدمون (للمدير فقط) ---------- */
   var USERS=null, usersMsg='', confirmU=null, LOGIN_DOMAIN='@stations.ojm';
   function loginName(e){ return e&&e.slice(-LOGIN_DOMAIN.length)===LOGIN_DOMAIN?e.slice(0,-LOGIN_DOMAIN.length):e; }
+  /* لا يُعرض أي بريد إلكتروني في الواجهة: يظهر اسم الدخول فقط */
+  function safeName(n){ n=String(n||''); return n.indexOf('@')>=0?'':n; }
+  function shownLogin(e){ return e&&e.slice(-LOGIN_DOMAIN.length)===LOGIN_DOMAIN?e.slice(0,-LOGIN_DOMAIN.length):''; }
   async function callUsers(body){
     var r=await sb.functions.invoke('admin-users',{body:body});
     if(r.error){
@@ -413,7 +417,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var stName={}; cfg.stations.forEach(function(s){ stName[s.id]=s.name; });
     var rows=USERS.map(function(u){
       var me=u.id===UID;
-      return '<tr><td><strong>'+esc(u.full_name||'')+'</strong><div class="muted num" dir="ltr" style="text-align:right">'+esc(loginName(u.email))+'</div></td>'
+      return '<tr><td><strong>'+esc(safeName(u.full_name)||(me?'حسابك':''))+'</strong><div class="muted num" dir="ltr" style="text-align:right">'+esc(shownLogin(u.email))+'</div></td>'
         +'<td>'+(u.role?esc(ROLE_LABEL[u.role]):'<span class="chip warn">بلا صلاحية</span>')+(u.station_id?'<div class="muted">'+esc(stName[u.station_id]||'')+'</div>':'')+'</td>'
         +'<td>'+(me?'<span class="muted">حسابك</span>':'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="text" class="num-in" id="np_'+u.id+'" placeholder="كلمة سر جديدة" dir="ltr" style="max-width:150px" autocomplete="off"><button type="button" class="btn ghost small" data-act="upass" data-id="'+u.id+'">تغيير</button><button type="button" class="btn danger small" data-act="udel" data-id="'+u.id+'">'+(confirmU===u.id?'تأكيد الحذف':'حذف')+'</button></div>')+'</td></tr>';
     }).join('');
@@ -451,8 +455,132 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     }catch(e){ confirmU=null; box('<div class="result bad">'+esc(e.message)+'</div>'); }
   }
 
+  /* ---------- نسخة احتياطية إلى إكسل (للمدير فقط) ---------- */
+  var expR={all:true,from:'',to:''};
+  function lastExport(){ try{ return localStorage.getItem('lastExport:'+UID)||''; }catch(e){ return ''; } }
+  function lastExportHTML(){
+    var le=lastExport();
+    if(!le) return '<span class="chip warn">لم تُصدَّر نسخة بعد من هذا الجهاز</span>';
+    var dd=diffDays(today(),le.slice(0,10));
+    return '<span class="chip '+(dd>=7?'warn':'ok')+'">آخر تصدير: <span class="num">'+esc(le)+'</span>'+(dd>=7?' · مضى أكثر من أسبوع':'')+'</span>';
+  }
+  function exportPanelHTML(){
+    return '<section class="panel" id="exportPanel"><div class="panel-head"><h2>نسخة احتياطية إلى إكسل</h2><span id="elast">'+lastExportHTML()+'</span></div>'
+      +'<div class="muted" style="margin-bottom:10px">ملف واحد فيه كل المبيعات والمشتريات وقراءات الخزانات والفرق اليومي وسعة كل خزان وسجل التعديلات، مرتبة حسب المحطة ثم التاريخ. كل الكميات بالليترات.</div>'
+      +'<label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" id="e_all" data-exp="all" style="width:auto;margin:0"'+(expR.all?' checked':'')+'> كل السجل</label>'
+      +'<div class="grid2" style="margin-top:10px"><div><label for="e_from">من تاريخ</label><input type="date" id="e_from" data-exp="from" dir="ltr" value="'+esc(expR.from)+'"'+(expR.all?' disabled':'')+'></div>'
+      +'<div><label for="e_to">إلى تاريخ</label><input type="date" id="e_to" data-exp="to" dir="ltr" value="'+esc(expR.to)+'"'+(expR.all?' disabled':'')+'></div></div>'
+      +'<div class="btnrow" style="margin-top:12px"><button type="button" class="btn" data-act="expxls">تصدير إلى إكسل</button></div>'
+      +'<div id="emsg"></div>'
+      +'<div class="hint" style="margin-top:8px">هذه نسخة يدوية. احتفظ بالملف في مكان آمن خارج الهاتف، وكرّر التصدير كل أسبوع على الأقل.</div></section>';
+  }
+  function syncExpInputs(){
+    var a=document.getElementById('e_all'), f=document.getElementById('e_from'), t=document.getElementById('e_to'); if(!a||!f||!t) return;
+    a.checked=expR.all; f.disabled=expR.all; t.disabled=expR.all; f.value=expR.from; t.value=expR.to;
+  }
+  function expOnChange(el){
+    var k=el.getAttribute('data-exp'); if(!k) return false;
+    if(k==='all'){
+      expR.all=el.checked;
+      if(!expR.all){ var td=today(); if(!expR.to) expR.to=td; if(!expR.from) expR.from=td.slice(0,8)+'01'; }
+      syncExpInputs();
+    } else expR[k]=el.value;
+    return true;
+  }
+  function ordKeys(obj,order){
+    var ks=Object.keys(obj||{}).filter(function(k){ return obj[k]!=null; });
+    return ks.sort(function(a,b){ var x=order.indexOf(a), y=order.indexOf(b); if(x<0) x=999; if(y<0) y=999; return x-y||(a<b?-1:1); });
+  }
+  function snapText(st,s){
+    var parts=[], tl={}; st.tanks.forEach(function(t){ tl[t.id]=tankLabel(st,t); });
+    var sa=ordKeys(s.sales,cfg.fuels).map(function(f){ return f+' '+s.sales[f]; });
+    var rc=ordKeys(s.recv,cfg.fuels).map(function(f){ return f+' '+s.recv[f]; });
+    var dp=Object.keys(s.dip||{}).filter(function(id){ return s.dip[id]!=null; }).map(function(id){ return (tl[id]||'خزان محذوف')+' '+s.dip[id]; });
+    if(sa.length) parts.push('المبيعات: '+sa.join('، '));
+    if(rc.length) parts.push('المستلم: '+rc.join('، '));
+    if(dp.length) parts.push('الشيش: '+dp.join('، '));
+    return parts.join(' | ');
+  }
+  function mkSheet(rows,widths){
+    var ws=XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=widths.map(function(w){ return {wch:w}; });
+    if(rows.length>1) ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:rows.length-1,c:rows[0].length-1}})};
+    return ws;
+  }
+  async function doExport(){
+    if(ROLE!=='manager') return;
+    var box=document.getElementById('emsg'), btn=document.querySelector('[data-act=expxls]');
+    var bad=function(m){ box.innerHTML='<div class="result bad">'+esc(m)+'</div>'; };
+    if(!window.XLSX){ bad('تعذّر تحميل أداة إكسل. تأكد من الاتصال بالإنترنت ثم أعد فتح الصفحة.'); return; }
+    var from=expR.all?'':expR.from, to=expR.all?'':expR.to;
+    if(!expR.all){ if(!from||!to){ bad('اختر تاريخ البداية وتاريخ النهاية، أو فعّل «كل السجل».'); return; } if(from>to){ bad('تاريخ البداية بعد تاريخ النهاية.'); return; } }
+    btn.disabled=true; box.innerHTML='<div class="result">جارٍ تجهيز الملف...</div>';
+    try{
+      await DB.loadAll();
+      var inR=function(d){ return (!from||d>=from)&&(!to||d<=to); };
+      var H={
+        sales:['المحطة','التاريخ','الوقود','المبيعات (ليتر)'],
+        recv:['المحطة','التاريخ','الوقود','المشتريات المستلمة (ليتر)'],
+        dip:['المحطة','التاريخ','الخزان','الوقود','الكمية السابقة (ليتر)','قراءة الشيش (ليتر)','التغير (ليتر)'],
+        vr:['المحطة','التاريخ','الوقود','الكمية السابقة (ليتر)','المستلم (ليتر)','المبيعات (ليتر)','المتوقع (ليتر)','مجموع الشيش (ليتر)','الفرق (ليتر)','الحالة'],
+        tk:['المحطة','الموقع','الخزان','الوقود','السعة (ليتر)','الرصيد الافتتاحي (ليتر)','نسبة التنبيه %','الكمية الحالية (ليتر)','نسبة الامتلاء %','مقفل بعد أول يومية'],
+        lg:['المحطة','تاريخ اليومية','تاريخ التعديل','وقت التعديل','السبب','النسخة القديمة']
+      };
+      var R={sales:[H.sales],recv:[H.recv],dip:[H.dip],vr:[H.vr],tk:[H.tk],lg:[H.lg]}, days=0;
+      cfg.stations.forEach(function(st){
+        dates(st.id).forEach(function(d){
+          if(!inR(d)) return;
+          var e=entries[st.id][d]; days++;
+          ordKeys(e.sales,cfg.fuels).forEach(function(f){ R.sales.push([st.name,d,f,e.sales[f]]); });
+          ordKeys(e.recv,cfg.fuels).forEach(function(f){ R.recv.push([st.name,d,f,e.recv[f]]); });
+          st.tanks.forEach(function(t){ var q=e.dip[t.id]; if(q==null) return; var pv=prevOf(st,t,d); R.dip.push([st.name,d,tankLabel(st,t),t.fuel,pv,q,q-pv]); });
+          fuelsOf(st).forEach(function(f){
+            var v=fuelVar(st,f,d,e); if(!v.has) return;
+            var s=v.gap?'يوم ناقص قبلها':(cfg.tol==null?'الحد غير محدد':(over(v.diff)?'فرق كبير':'ضمن الحدود'));
+            R.vr.push([st.name,d,f,v.prev,v.recv,v.sales,v.exp,v.act,v.diff,s]);
+          });
+          (e.versions||[]).forEach(function(vv){ R.lg.push([st.name,d,vv.on,vv.at,vv.reason||'',snapText(st,vv.snap)]); });
+        });
+        st.tanks.forEach(function(t){
+          var now=tankNow(st,t);
+          R.tk.push([st.name,/^https?:\/\//i.test(st.loc||'')?'رابط الخريطة':(st.loc||''),tankLabel(st,t),t.fuel,t.cap,t.opening,t.alert,now,t.cap?Math.round(now/t.cap*100):'',isLockedId(st.id,t.id)?'نعم':'لا']);
+        });
+      });
+      var iso=new Date().toISOString(), stamp=bDateOf(iso)+' '+bTimeOf(iso);
+      var sum=[
+        ['نسخة احتياطية: يوميات المحطات'],
+        [],
+        ['تاريخ التصدير (بتوقيت بيروت)',stamp],
+        ['الفترة',expR.all?'كل السجل':(from+' إلى '+to)],
+        ['عدد المحطات',cfg.stations.length],
+        ['عدد اليوميات في الملف',days],
+        ['صفوف المبيعات',R.sales.length-1],
+        ['صفوف المشتريات',R.recv.length-1],
+        ['صفوف قراءات الخزانات',R.dip.length-1],
+        ['صفوف التعديلات المحفوظة',R.lg.length-1],
+        [],
+        ['ملاحظة','كل الكميات بالليترات، ولا توجد أسعار. الأوراق مرتبة حسب المحطة ثم التاريخ.']
+      ];
+      var wb=XLSX.utils.book_new();
+      var wsS=XLSX.utils.aoa_to_sheet(sum); wsS['!cols']=[{wch:30},{wch:60}];
+      XLSX.utils.book_append_sheet(wb,wsS,'ملخص');
+      XLSX.utils.book_append_sheet(wb,mkSheet(R.sales,[24,13,14,18]),'المبيعات');
+      XLSX.utils.book_append_sheet(wb,mkSheet(R.recv,[24,13,14,24]),'المشتريات');
+      XLSX.utils.book_append_sheet(wb,mkSheet(R.dip,[24,13,20,12,20,20,16]),'قراءات الخزانات');
+      XLSX.utils.book_append_sheet(wb,mkSheet(R.vr,[24,13,12,20,14,14,16,18,14,18]),'الفرق اليومي');
+      XLSX.utils.book_append_sheet(wb,mkSheet(R.tk,[24,20,20,12,16,22,14,20,16,18]),'الخزانات');
+      XLSX.utils.book_append_sheet(wb,mkSheet(R.lg,[24,14,14,12,30,80]),'سجل التعديلات');
+      wb.Workbook={Views:[{RTL:true}]};
+      XLSX.writeFile(wb,'stations-backup-'+bDateOf(iso)+(expR.all?'':'_'+from+'_to_'+to)+'.xlsx',{compression:true});
+      try{ localStorage.setItem('lastExport:'+UID,stamp); }catch(e){}
+      var el=document.getElementById('elast'); if(el) el.innerHTML=lastExportHTML();
+      box.innerHTML='<div class="result">تم تجهيز الملف: '+days+' يومية من '+cfg.stations.length+' محطات. تحقق من مجلد التنزيلات في هاتفك.</div>';
+    }catch(err){ bad('تعذّر التصدير: '+DB.errText(err)); }
+    finally{ btn.disabled=false; }
+  }
+
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b5';
+  var APP_BUILD='b6';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -503,7 +631,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     html+='<section class="panel"><div class="btnrow"><button type="button" class="btn" data-act="save">حفظ الإعدادات</button><button type="button" class="btn ghost" data-act="discard">تراجع عن التعديلات</button></div>'
       +'<div class="hint" style="margin-top:8px">الكمية الافتتاحية هي ما في الخزان يوم بدء استخدام النظام في محطة قائمة. تُستخدم مرة واحدة كقراءة سابقة لأول يومية ثم تُقفل، وبعدها تكون القراءة السابقة هي قراءة آخر يوم مسجّل. الخزان الذي يُضاف لاحقاً له كمية افتتاحية خاصة به. تغيير إعدادات الخزانات يسري على الأيام القادمة ولا يغيّر السجل.</div>'
       +'<div id="smsg">'+settingsMsg+'</div></section>'
-      +(ROLE==='manager'?'<section class="panel" id="usersPanel"></section>':'')+'</div>';
+      +(ROLE==='manager'?exportPanelHTML()+'<section class="panel" id="usersPanel"></section>':'')+'</div>';
     root.innerHTML=html;
     renderUsers();
   }
@@ -984,7 +1112,8 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     if(j===null) st[k]=el.value; else st.tanks[+j][k]=el.value;
   });
   main.addEventListener('change',function(ev){
-    var el=ev.target, d=settingsDraft; if(!d) return;
+    var el=ev.target; if(el.getAttribute&&el.getAttribute('data-exp')){ expOnChange(el); return; }
+    var d=settingsDraft; if(!d) return;
     var i=el.getAttribute('data-i'), k=el.getAttribute('data-k'), j=el.getAttribute('data-j');
     if(i!==null&&k==='fuel'&&j!==null) d.stations[+i].tanks[+j].fuel=el.value;
   });
@@ -997,6 +1126,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var act=b.getAttribute('data-act'), d=settingsDraft, i=+b.getAttribute('data-i'), j=+b.getAttribute('data-j'), dd=b.getAttribute('data-d');
     var st=byId(currentStation);
     if(act==='uadd'||act==='upass'||act==='udel'){ usersAction(act,b); return; }
+    if(act==='expxls'){ doExport(); return; }
     /* الإعدادات */
     if(['addStation','addTank','delTank','delStation','addFuel','delFuel','discard','save'].indexOf(act)>=0){
       if(!d) return;
@@ -1035,7 +1165,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   function applyRole(){
     ALLOWED=ROLE==='manager'?['settings','station','distribution','manager','sales','rules']:(ROLE==='distribution'?['distribution','sales','rules']:['station']);
     document.querySelectorAll('.tabs button').forEach(function(b){ b.hidden=ALLOWED.indexOf(b.getAttribute('data-view'))<0; });
-    document.getElementById('who').textContent=(MY_NAME?MY_NAME+' · ':'')+(ROLE_LABEL[ROLE]||'');
+    document.getElementById('who').textContent=(safeName(MY_NAME)?safeName(MY_NAME)+' · ':'')+(ROLE_LABEL[ROLE]||'');
   }
   async function start(session){
     var u=session.user; UID=u.id;
