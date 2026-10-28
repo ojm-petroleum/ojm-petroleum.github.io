@@ -215,7 +215,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   function fuelsOf(st){ var o=[]; st.tanks.forEach(function(t){ if(o.indexOf(t.fuel)<0) o.push(t.fuel); }); return o; }
   function allFuels(){ var o=[]; cfg.stations.forEach(function(s){ fuelsOf(s).forEach(function(f){ if(o.indexOf(f)<0) o.push(f); }); }); return o; }
   function tanksOf(st,fuel){ return st.tanks.filter(function(t){return t.fuel===fuel;}); }
-  function tankLabel(st,t){ var n=0; for(var i=0;i<st.tanks.length;i++){ if(st.tanks[i].fuel===t.fuel){ n++; if(st.tanks[i]===t) break; } } return t.fuel+' · خزان '+n; }
+  function tankLabel(st,t){ if(t.name) return t.fuel+' · '+t.name; var n=0; for(var i=0;i<st.tanks.length;i++){ if(st.tanks[i].fuel===t.fuel){ n++; if(st.tanks[i]===t) break; } } return t.fuel+' · خزان '+n; }
   function lvlT(p,t){ return p<t.alert/200?'crit':(p<t.alert/100?'warn':'ok'); }
   function barCls(p,t){ var l=lvlT(p,t); return l==='ok'?'':l; }
   function today(){ return bDateOf(new Date().toISOString()); }
@@ -306,7 +306,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       var s=r[0].data;
       cfg={fuels:s.fuels||[],tol:s.tol,deadline:s.deadline,fill:s.fill,daysAlert:s.days_alert,
         stations:r[1].data.map(function(x){ return {id:x.id,name:x.name,loc:x.loc||'',
-          tanks:r[2].data.filter(function(t){return t.station_id===x.id;}).map(function(t){ return {id:t.id,fuel:t.fuel,cap:t.cap,opening:t.opening,alert:t.alert}; })}; })};
+          tanks:r[2].data.filter(function(t){return t.station_id===x.id;}).map(function(t){ return {id:t.id,name:t.name||'',fuel:t.fuel,cap:t.cap,opening:t.opening,alert:t.alert}; })}; })};
       dirty();
     },
     loadEntries:async function(since){
@@ -334,7 +334,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       r=await sb.from('stations').upsert(nc.stations.map(function(s,i){ return {id:s.id,name:s.name,loc:s.loc||null,sort:i}; })); if(r.error) throw r.error;
       var rmT=oldT.filter(function(x){return newT.indexOf(x)<0 && newS.indexOf(cfg.stations.filter(function(s){return s.tanks.some(function(t){return t.id===x;});})[0].id)>=0;});
       if(rmT.length){ r=await sb.from('tanks').delete().in('id',rmT); if(r.error) throw r.error; }
-      var trows=[]; nc.stations.forEach(function(s){ s.tanks.forEach(function(t,j){ trows.push({id:t.id,station_id:s.id,fuel:t.fuel,cap:t.cap,opening:t.opening,alert:t.alert,sort:j}); }); });
+      var trows=[]; nc.stations.forEach(function(s){ s.tanks.forEach(function(t,j){ trows.push({id:t.id,station_id:s.id,name:t.name||null,fuel:t.fuel,cap:t.cap,opening:t.opening,alert:t.alert,sort:j}); }); });
       if(trows.length){ r=await sb.from('tanks').upsert(trows); if(r.error) throw r.error; }
       var rmS=oldS.filter(function(x){return newS.indexOf(x)<0;});
       if(rmS.length){ r=await sb.from('stations').delete().in('id',rmS); if(r.error) throw r.error; }
@@ -580,7 +580,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b6';
+  var APP_BUILD='b7';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -591,7 +591,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     }catch(e){}
   }
   var settingsDraft=null, openSt={}, confirmKey=null, settingsMsg='';
-  function newTank(d){ return {id:rid(),fuel:'',cap:'',opening:'',alert:''}; }
+  function newTank(d){ return {id:rid(),name:'',fuel:'',cap:'',opening:'',alert:''}; }
   function renderSettings(root){
     var d=settingsDraft||(settingsDraft=clone(cfg));
     var used={}; d.stations.forEach(function(s){ s.tanks.forEach(function(t){ used[t.fuel]=true; }); });
@@ -619,7 +619,8 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
         var lk=isLockedId(st.id,t.id);
         var fopts='<option value=""'+(t.fuel?'':' selected')+'>اختر النوع</option>'+d.fuels.map(function(f){ return '<option'+(f===t.fuel?' selected':'')+'>'+esc(f)+'</option>'; }).join('');
         html+='<div class="tankcfg"><div class="hd"><span>الخزان '+(j+1)+'</span>'+(st.tanks.length>1?'<button type="button" class="btn danger small" data-act="delTank" data-i="'+i+'" data-j="'+j+'">حذف الخزان</button>':'')+'</div>'
-          +'<div class="grid4"><div><label for="f_'+i+'_'+j+'">نوع المحروقات</label><select id="f_'+i+'_'+j+'" data-i="'+i+'" data-j="'+j+'" data-k="fuel"'+(lk?' disabled':'')+'>'+fopts+'</select>'+(lk?'<div class="hint">مقفل: للخزان سجل يوميات</div>':'')+'</div>'
+          +'<div class="grid4"><div><label for="tn_'+i+'_'+j+'">اسم الخزان</label><input type="text" id="tn_'+i+'_'+j+'" data-i="'+i+'" data-j="'+j+'" data-k="name" value="'+esc(t.name||'')+'" maxlength="60" placeholder="مثال: خزان الشارع"><div class="hint">يظهر في كل الشاشات والتقارير</div></div>'
+          +'<div><label for="f_'+i+'_'+j+'">نوع المحروقات</label><select id="f_'+i+'_'+j+'" data-i="'+i+'" data-j="'+j+'" data-k="fuel"'+(lk?' disabled':'')+'>'+fopts+'</select>'+(lk?'<div class="hint">مقفل: للخزان سجل يوميات</div>':'')+'</div>'
           +'<div><label for="c_'+i+'_'+j+'">السعة الإجمالية (ليتر)</label><input type="text" inputmode="numeric" class="num-in" id="c_'+i+'_'+j+'" data-i="'+i+'" data-j="'+j+'" data-k="cap" value="'+t.cap+'"></div>'
           +'<div><label for="o_'+i+'_'+j+'">الكمية الافتتاحية (ليتر)</label><input type="text" inputmode="numeric" class="num-in" id="o_'+i+'_'+j+'" data-i="'+i+'" data-j="'+j+'" data-k="opening" value="'+t.opening+'"'+(lk?' disabled':'')+'><div class="hint">'+(lk?'مقفلة: استُخدمت عند أول يومية':'تُستخدم مرة واحدة عند بدء المحطة')+'</div></div>'
           +'<div><label for="a_'+i+'_'+j+'">نسبة التنبيه (%)</label><input type="text" inputmode="numeric" class="num-in" id="a_'+i+'_'+j+'" data-i="'+i+'" data-j="'+j+'" data-k="alert" value="'+t.alert+'"></div></div></div>';
@@ -649,8 +650,14 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       if(!nm) errs.push('المحطة '+(i+1)+': الاسم مطلوب');
       else if(names[nm]) errs.push(tag+': الاسم مكرر');
       names[nm]=true;
+      var tnames={};
       st.tanks.forEach(function(t,j){
         var c=num(t.cap), o=num(t.opening), a=num(t.alert), w=tag+'، الخزان '+(j+1)+': ', lo=lockedOld[st.id+'/'+t.id];
+        var tn=String(t.name||'').trim();
+        if(!tn) errs.push(w+'اسم الخزان مطلوب');
+        else if(tn.length>60) errs.push(w+'اسم الخزان أطول من 60 حرفاً');
+        else if(tnames[tn.toLowerCase()]) errs.push(w+'اسم الخزان مكرر في المحطة');
+        tnames[tn.toLowerCase()]=true;
         if(!t.fuel||d.fuels.indexOf(t.fuel)<0) errs.push(w+'اختر نوع المحروقات');
         if(c===null||isNaN(c)||c<1) errs.push(w+'السعة يجب أن تكون رقماً أكبر من صفر');
         if(lo){ var os=byId(st.id); if(c>0 && c<tankNow(os,lo)) errs.push(w+'السعة أقل من الكمية الحالية في الخزان'); }
@@ -669,7 +676,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       st.name=String(st.name).trim(); st.loc=String(st.loc||'').trim();
       st.tanks.forEach(function(t){
         var lo=lockedOld[st.id+'/'+t.id];
-        t.cap=num(t.cap); t.alert=num(t.alert);
+        t.name=String(t.name||'').trim(); t.cap=num(t.cap); t.alert=num(t.alert);
         if(lo){ t.opening=lo.opening; t.fuel=lo.fuel; } else t.opening=num(t.opening);
       });
     });
