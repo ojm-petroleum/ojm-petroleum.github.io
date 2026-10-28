@@ -154,7 +154,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
 </head><body>
 <div class="login" id="login" dir="rtl" hidden><form id="lform" novalidate>
   <h2>يومية المحطات</h2><div class="sub2">سجّل الدخول للمتابعة</div>
-  <label for="lemail">البريد</label><input type="email" id="lemail" autocomplete="username" dir="ltr" inputmode="email">
+  <label for="lemail">البريد أو اسم الدخول</label><input type="text" id="lemail" autocomplete="username" dir="ltr" autocapitalize="none" autocorrect="off" spellcheck="false">
   <label for="lpass">كلمة السر</label><input type="password" id="lpass" autocomplete="current-password" dir="ltr">
   <button class="btn" type="submit" id="lbtn" style="width:100%">دخول</button>
   <div class="lerr" id="lmsg" role="status"></div>
@@ -381,6 +381,68 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     return '<div class="alert"><span class="chip '+a.sev+'">'+sevLabel[a.sev]+'</span><div><div class="t">'+esc(a.title)+'</div><div class="d">'+esc(a.detail)+'</div></div><div class="to">'+esc(a.to)+'</div></div>';
   }
 
+
+  /* ---------- المستخدمون (للمدير فقط) ---------- */
+  var USERS=null, usersMsg='', confirmU=null, LOGIN_DOMAIN='@stations.ojm';
+  function loginName(e){ return e&&e.slice(-LOGIN_DOMAIN.length)===LOGIN_DOMAIN?e.slice(0,-LOGIN_DOMAIN.length):e; }
+  async function callUsers(body){
+    var r=await sb.functions.invoke('admin-users',{body:body});
+    if(r.error){
+      var m=r.error.message||'تعذّر تنفيذ العملية';
+      try{ if(r.error.context&&r.error.context.json){ var j=await r.error.context.json(); if(j&&j.error) m=j.error; } }catch(e){}
+      throw new Error(m);
+    }
+    return r.data;
+  }
+  async function loadUsers(){
+    try{ var d=await callUsers({action:'list'}); USERS=d.users||[]; }
+    catch(e){ USERS=[]; usersMsg='<div class="result bad">تعذّر تحميل المستخدمين: '+esc(e.message)+'</div>'; }
+    renderUsers();
+  }
+  function renderUsers(){
+    var el=document.getElementById('usersPanel'); if(!el) return;
+    if(USERS===null){ el.innerHTML='<div class="panel-head"><h2>المستخدمون</h2></div><div class="muted">جارٍ التحميل...</div>'; loadUsers(); return; }
+    var stName={}; cfg.stations.forEach(function(s){ stName[s.id]=s.name; });
+    var rows=USERS.map(function(u){
+      var me=u.id===UID;
+      return '<tr><td><strong>'+esc(u.full_name||'')+'</strong><div class="muted num" dir="ltr" style="text-align:right">'+esc(loginName(u.email))+'</div></td>'
+        +'<td>'+(u.role?esc(ROLE_LABEL[u.role]):'<span class="chip warn">بلا صلاحية</span>')+(u.station_id?'<div class="muted">'+esc(stName[u.station_id]||'')+'</div>':'')+'</td>'
+        +'<td>'+(me?'<span class="muted">حسابك</span>':'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="text" class="num-in" id="np_'+u.id+'" placeholder="كلمة سر جديدة" dir="ltr" style="max-width:150px" autocomplete="off"><button type="button" class="btn ghost small" data-act="upass" data-id="'+u.id+'">تغيير</button><button type="button" class="btn danger small" data-act="udel" data-id="'+u.id+'">'+(confirmU===u.id?'تأكيد الحذف':'حذف')+'</button></div>')+'</td></tr>';
+    }).join('');
+    var stOpts='<option value="">اختر المحطة</option>'+cfg.stations.map(function(s){ return '<option value="'+s.id+'">'+esc(s.name)+'</option>'; }).join('');
+    el.innerHTML='<div class="panel-head"><h2>المستخدمون</h2><span class="muted">'+USERS.length+' حساب</span></div>'
+      +'<div class="tablewrap"><table><thead><tr><th>المستخدم</th><th>الدور والمحطة</th><th>إجراءات</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+      +'<h3 style="margin:18px 0 8px;font-size:15px">إضافة مستخدم</h3><div class="grid2">'
+      +'<div><label for="u_name">الاسم</label><input type="text" id="u_name" autocomplete="off"></div>'
+      +'<div><label for="u_login">اسم الدخول (أو بريد)</label><input type="text" id="u_login" dir="ltr" autocomplete="off" autocapitalize="none" placeholder="مثال: tripoli1"></div>'
+      +'<div><label for="u_pass">كلمة السر (8 أحرف على الأقل)</label><input type="text" id="u_pass" dir="ltr" autocomplete="off"></div>'
+      +'<div><label for="u_role">الدور</label><select id="u_role"><option value="station">مدير محطة</option><option value="distribution">مسؤول التوزيع</option><option value="manager">مدير</option></select></div>'
+      +'<div><label for="u_st">المحطة (لمدير المحطة)</label><select id="u_st">'+stOpts+'</select></div></div>'
+      +'<div class="btnrow" style="margin-top:12px"><button type="button" class="btn" data-act="uadd">إضافة المستخدم</button></div>'
+      +'<div id="umsg">'+usersMsg+'</div>';
+    usersMsg='';
+  }
+  async function usersAction(act,b){
+    var box=function(h){ var m=document.getElementById('umsg'); if(m) m.innerHTML=h; };
+    try{
+      if(act==='uadd'){
+        var lg=document.getElementById('u_login').value.trim().toLowerCase(); if(lg.indexOf('@')<0) lg=lg+LOGIN_DOMAIN;
+        var body={action:'create',email:lg,password:document.getElementById('u_pass').value,full_name:document.getElementById('u_name').value.trim(),role:document.getElementById('u_role').value,station_id:document.getElementById('u_st').value||null};
+        if(!body.full_name){ box('<div class="result bad">اكتب اسم المستخدم</div>'); return; }
+        box('<div class="result">جارٍ الإضافة...</div>'); await callUsers(body);
+        USERS=null; usersMsg='<div class="result">تمت إضافة المستخدم. أعطِه اسم الدخول وكلمة السر.</div>'; renderUsers();
+      } else if(act==='upass'){
+        var id=b.getAttribute('data-id'), pw=document.getElementById('np_'+id).value;
+        box('<div class="result">جارٍ التغيير...</div>'); await callUsers({action:'setpass',id:id,password:pw});
+        box('<div class="result">تم تغيير كلمة السر.</div>');
+      } else if(act==='udel'){
+        var id2=b.getAttribute('data-id');
+        if(confirmU!==id2){ confirmU=id2; renderUsers(); return; }
+        confirmU=null; await callUsers({action:'remove',id:id2}); USERS=null; usersMsg='<div class="result">تم حذف المستخدم.</div>'; renderUsers();
+      }
+    }catch(e){ confirmU=null; box('<div class="result bad">'+esc(e.message)+'</div>'); }
+  }
+
   /* ---------- شاشة الإعدادات ---------- */
   var settingsDraft=null, openSt={}, confirmKey=null, settingsMsg='';
   function newTank(d){ return {id:rid(),fuel:'',cap:'',opening:'',alert:''}; }
@@ -422,8 +484,10 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     });
     html+='<section class="panel"><div class="btnrow"><button type="button" class="btn" data-act="save">حفظ الإعدادات</button><button type="button" class="btn ghost" data-act="discard">تراجع عن التعديلات</button></div>'
       +'<div class="hint" style="margin-top:8px">الكمية الافتتاحية هي ما في الخزان يوم بدء استخدام النظام في محطة قائمة. تُستخدم مرة واحدة كقراءة سابقة لأول يومية ثم تُقفل، وبعدها تكون القراءة السابقة هي قراءة آخر يوم مسجّل. الخزان الذي يُضاف لاحقاً له كمية افتتاحية خاصة به. تغيير إعدادات الخزانات يسري على الأيام القادمة ولا يغيّر السجل.</div>'
-      +'<div id="smsg">'+settingsMsg+'</div></section></div>';
+      +'<div id="smsg">'+settingsMsg+'</div></section>'
+      +(ROLE==='manager'?'<section class="panel" id="usersPanel"></section>':'')+'</div>';
     root.innerHTML=html;
+    renderUsers();
   }
   function saveSettings(){
     var d=settingsDraft, errs=[], names={};
@@ -914,6 +978,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var b=ev.target.closest('[data-act]'); if(!b||b.disabled) return;
     var act=b.getAttribute('data-act'), d=settingsDraft, i=+b.getAttribute('data-i'), j=+b.getAttribute('data-j'), dd=b.getAttribute('data-d');
     var st=byId(currentStation);
+    if(act==='uadd'||act==='upass'||act==='udel'){ usersAction(act,b); return; }
     /* الإعدادات */
     if(['addStation','addTank','delTank','delStation','addFuel','delFuel','discard','save'].indexOf(act)>=0){
       if(!d) return;
@@ -975,8 +1040,9 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
   document.getElementById('lform').addEventListener('submit',async function(ev){
     ev.preventDefault();
-    var em=document.getElementById('lemail').value.trim(), pw=document.getElementById('lpass').value;
+    var em=document.getElementById('lemail').value.trim().toLowerCase(), pw=document.getElementById('lpass').value;
     if(!em||!pw){ document.getElementById('lmsg').textContent='اكتب البريد وكلمة السر'; return; }
+    if(em.indexOf('@')<0) em=em+'@stations.ojm';
     document.getElementById('lbtn').disabled=true; document.getElementById('lmsg').textContent='جارٍ الدخول...';
     var r=await sb.auth.signInWithPassword({email:em,password:pw});
     if(r.error){ showLogin(/Invalid login/i.test(r.error.message)?'البريد أو كلمة السر غير صحيحة':DB.errText(r.error)); return; }
