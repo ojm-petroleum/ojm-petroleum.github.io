@@ -452,6 +452,16 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
+  var APP_BUILD='b5';
+  async function checkBuild(){
+    try{
+      if(stView.fv||settingsDraft) return;
+      var r=await fetch(location.pathname+'?chk='+Date.now(),{cache:'no-store'});
+      if(!r.ok) return;
+      var m=(await r.text()).match(/APP_BUILD='(\w+)'/);
+      if(m&&m[1]!==APP_BUILD){ location.replace(location.pathname+'?b='+m[1]); }
+    }catch(e){}
+  }
   var settingsDraft=null, openSt={}, confirmKey=null, settingsMsg='';
   function newTank(d){ return {id:rid(),fuel:'',cap:'',opening:'',alert:''}; }
   function renderSettings(root){
@@ -1040,6 +1050,10 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     go(ALLOWED.indexOf(h)>=0?h:(ROLE==='manager'?(cfg.stations.length?'manager':'settings'):ALLOWED[0]));
     if(window.__timer) clearInterval(window.__timer);
     window.__timer=setInterval(function(){ if(document.hidden) return; if(ROLE==='station'||stView.fv||settingsDraft) return; refresh(true); },60000);
+    checkBuild();
+    if(window.__vtimer) clearInterval(window.__vtimer);
+    window.__vtimer=setInterval(checkBuild,300000);
+    if(!window.__vhook){ window.__vhook=1; document.addEventListener('visibilitychange',function(){ if(!document.hidden) checkBuild(); }); }
   }
   async function refresh(silent){
     var bar=document.getElementById('netbar');
