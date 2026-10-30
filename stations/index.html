@@ -1,5 +1,13 @@
 <!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>يومية المحطات</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0E5A52">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="يومية المحطات">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
 /* التصميم: الإعدادات أولاً ثم الشاشات التي تتكوّن منها؛ لوحة المبيعات قوائم مرتبة بأشرطة أفقية، لكل نوع وقود لونه الثابت */
@@ -180,6 +188,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   <main id="main" aria-live="polite"></main>
 </div>
 
+<script>if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js',{scope:'./'}).catch(function(){}); }</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -270,7 +279,9 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   /* ---------- الاتصال بقاعدة البيانات ---------- */
   var SB_URL='https://ljigywbdqxyapwwhbxdu.supabase.co';
   var SB_KEY='sb_publishable_KmMMoZ2Gx05DM6KzcCcCiQ_9CXsUGVm';
-  var sb=window.supabase.createClient(SB_URL,SB_KEY);
+  /* مهلة 20 ثانية لكل طلب حتى لا يعلق الإرسال على شبكة ضعيفة */
+  function tfetch(u,o){ o=o||{}; var c=new AbortController(), t=setTimeout(function(){ c.abort(); },20000); if(o.signal){ if(o.signal.aborted) c.abort(); else o.signal.addEventListener('abort',function(){ c.abort(); }); } o.signal=c.signal; return fetch(u,o).finally(function(){ clearTimeout(t); }); }
+  var sb=window.supabase.createClient(SB_URL,SB_KEY,{global:{fetch:tfetch}});
   var ROLE=null, UID=null, MY_STATION=null, MY_NAME='', ALLOWED=[];
   var ROLE_LABEL={manager:'المدير',distribution:'مسؤول التوزيع',station:'مدير المحطة'};
   function bParts(d){ var o={}; new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Beirut',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d).forEach(function(p){ o[p.type]=p.value; }); return o; }
@@ -282,7 +293,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   var DB={
     errText:function(e){
       var m=(e&&e.message)||String(e||'');
-      if(!navigator.onLine||/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'لا يوجد اتصال بالإنترنت. أرقامك محفوظة على هذا الهاتف، أعد المحاولة عند عودة الشبكة.';
+      if(!navigator.onLine||/Failed to fetch|NetworkError|Load failed|abort/i.test(m)) return 'لا يوجد اتصال بالإنترنت. أرقامك محفوظة على هذا الهاتف، أعد المحاولة عند عودة الشبكة.';
       if(e&&(e.code==='42501'||e.code==='PGRST116')) return 'غير مسموح بهذا الإجراء الآن: اليومية مقفلة أو لا تخص محطتك.';
       if(e&&e.code==='23505') return 'هذه اليومية موجودة مسبقاً. اضغط تحديث ثم عدّلها.';
       return m;
@@ -354,6 +365,96 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   function loadDrafts(){ drafts={}; try{ for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i), p='draft:'+UID+':'; if(k.indexOf(p)===0) drafts[k.slice(p.length)]=JSON.parse(localStorage.getItem(k)); } }catch(e){} }
   function putDraft(sid,d,raw){ drafts[sid+'|'+d]=raw; try{ localStorage.setItem(draftKey(sid,d),JSON.stringify(raw)); }catch(e){} }
   function clearDraft(sid,d){ delete drafts[sid+'|'+d]; try{ localStorage.removeItem(draftKey(sid,d)); }catch(e){} }
+
+  /* ---------- العمل بلا شبكة والإرسال المؤجل (لمدير المحطة) ---------- */
+  var OFFLINE=false;
+  function isNetErr(e){ var m=(e&&e.message)||String(e||''); return !navigator.onLine||/Failed to fetch|NetworkError|Load failed|abort|network/i.test(m)||!!(e&&e.status>=500); }
+  function storedUid(){
+    try{
+      for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(/^sb-.*-auth-token$/.test(k)){ var j=JSON.parse(localStorage.getItem(k)); if(j&&j.user&&j.user.id) return j.user.id; } }
+      return localStorage.getItem('lastUid')||null;
+    }catch(e){ return null; }
+  }
+  function saveCache(){ if(ROLE!=='station'||!UID) return; try{ localStorage.setItem('cache:'+UID,JSON.stringify({at:Date.now(),profile:{role:ROLE,station_id:MY_STATION,full_name:MY_NAME},cfg:cfg,entries:entries})); localStorage.setItem('lastUid',UID); }catch(e){} }
+  function readCache(uid){ try{ var s=localStorage.getItem('cache:'+uid); return s?JSON.parse(s):null; }catch(e){ return null; } }
+  function obKey(){ return 'outbox:'+UID; }
+  function obGet(){ try{ var a=JSON.parse(localStorage.getItem(obKey())||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+  function obSet(a){ try{ if(a.length) localStorage.setItem(obKey(),JSON.stringify(a)); else localStorage.removeItem(obKey()); }catch(e){} }
+  function obFor(sid){ return obGet().filter(function(x){return x.sid===sid;}); }
+  function obFind(sid,day){ return obGet().filter(function(x){return x.sid===sid&&x.day===day;})[0]||null; }
+  function obCount(){ return obGet().filter(function(x){return x.state==='wait';}).length; }
+  function obAdd(sid,day,ne){
+    var a=obGet().filter(function(x){return !(x.sid===sid&&x.day===day);});
+    a.push({sid:sid,day:day,ne:ne,at:new Date().toISOString(),state:'wait',err:''}); obSet(a);
+    return !!obFind(sid,day);
+  }
+  function canon(o){ if(o===null||typeof o!=='object') return JSON.stringify(o); if(Array.isArray(o)) return '['+o.map(canon).join(',')+']'; return '{'+Object.keys(o).sort().map(function(k){ return JSON.stringify(k)+':'+canon(o[k]); }).join(',')+'}'; }
+  function sameEntry(a,b){ return canon({sales:a.sales||{},recv:a.recv||{},dip:a.dip||{}})===canon({sales:b.sales||{},recv:b.recv||{},dip:b.dip||{}}); }
+  var flushing=false;
+  async function flushOutbox(){
+    if(flushing||!UID||ROLE!=='station') return false;
+    var q=obGet(); if(!q.some(function(x){return x.state==='wait';})) return false;
+    flushing=true; var changed=false;
+    try{
+      for(var i=0;i<q.length;i++){
+        var it=q[i]; if(it.state!=='wait') continue;
+        try{
+          var r=await sb.from('entries').insert({station_id:it.sid,day:it.day,sales:it.ne.sales,recv:it.ne.recv,dip:it.ne.dip}).select('submitted_at').single();
+          if(r.error) throw r.error;
+          setE(it.sid,it.day,{sales:it.ne.sales,recv:it.ne.recv||{},dip:it.ne.dip,time:bTimeOf(r.data.submitted_at),versions:[]});
+          it.state='done'; changed=true;
+        }catch(err){
+          if(isNetErr(err)) break;
+          changed=true;
+          if(err&&err.code==='23505'){
+            /* وصلت من محاولة سابقة؟ نقارن ما في النظام بما في الهاتف */
+            var ex=await sb.from('entries').select('sales,recv,dip,submitted_at').eq('station_id',it.sid).eq('day',it.day).single();
+            if(ex.error){ if(isNetErr(ex.error)){ changed=false; break; } it.state='rejected'; it.err='تعذّر التحقق من اليومية الموجودة في النظام. اطلب من المدير مراجعتها.'; }
+            else if(sameEntry(ex.data,it.ne)){ setE(it.sid,it.day,{sales:ex.data.sales||{},recv:ex.data.recv||{},dip:ex.data.dip||{},time:bTimeOf(ex.data.submitted_at),versions:[]}); it.state='done'; }
+            else { it.state='rejected'; it.err='يوجد في النظام إدخال مختلف لهذا اليوم. اطلب من المدير مراجعته.'; }
+          } else if(err&&(err.code==='42501'||err.code==='PGRST116')){
+            it.state='rejected'; it.err='لم يقبلها النظام: اليومية تُقبل في يومها فقط وقد انتهى. اطلب من المدير إدخالها بالقيم المعروضة هنا.';
+          } else { it.state='rejected'; it.err=DB.errText(err); }
+        }
+      }
+    } finally {
+      /* ندمج النتيجة مع ما في الهاتف الآن، حتى لا نمحو إدخالاً أُضيف أثناء الإرسال */
+      var res={}; q.forEach(function(x){ res[x.sid+'|'+x.day+'|'+x.at]=x; });
+      obSet(obGet().map(function(x){ return res[x.sid+'|'+x.day+'|'+x.at]||x; }).filter(function(x){ return x.state!=='done'; }));
+      flushing=false;
+    }
+    if(changed) saveCache();
+    return changed;
+  }
+  function updateNet(){
+    var bar=document.getElementById('netbar'); if(!bar) return;
+    var n=obCount(), off=OFFLINE||!navigator.onLine;
+    if(off){ bar.textContent='أنت غير متصل بالإنترنت.'+(ROLE==='station'?' يمكنك إدخال اليومية وستُرسل تلقائياً عند عودة الشبكة.':' بعض الشاشات تحتاج اتصالاً.')+(n?' بانتظار الإرسال: '+n:''); bar.hidden=false; bar.setAttribute('data-n','1'); }
+    else if(n){ bar.textContent='يوجد '+n+' يومية بانتظار الإرسال، وسيُعاد إرسالها تلقائياً.'; bar.hidden=false; bar.setAttribute('data-n','1'); }
+    else if(bar.getAttribute('data-n')==='1'){ bar.hidden=true; bar.removeAttribute('data-n'); }
+  }
+  function afterOutbox(){
+    updateNet();
+    if(ROLE==='station'&&!stView.fv&&location.hash.replace('#','')==='station'&&cfg.stations.length) renderStation(main);
+  }
+  async function goOnline(){
+    if(!OFFLINE||!navigator.onLine) return;
+    try{
+      var s=await sb.auth.getSession();
+      if(!s.data.session){
+        if(s.error&&isNetErr(s.error)) return;
+        OFFLINE=false; try{ localStorage.removeItem('lastUid'); }catch(e){} await sb.auth.signOut();
+        showLogin('انتهت الجلسة، سجّل الدخول من جديد. ما كتبته محفوظ على هذا الهاتف وسيُرسل بعد الدخول.'); return;
+      }
+      await flushOutbox();
+      await DB.loadAll(); saveCache(); OFFLINE=false; updateHeader(); updateNet();
+      go(location.hash.replace('#','')||'station');
+    }catch(e){ /* نبقى بلا اتصال ونعيد المحاولة */ }
+  }
+  setInterval(function(){ if(!UID) return; if(OFFLINE) goOnline(); else if(ROLE==='station') flushOutbox().then(afterOutbox); },30000);
+  window.addEventListener('online',function(){ updateNet(); if(!UID) return; if(OFFLINE) goOnline(); else if(ROLE==='station') flushOutbox().then(afterOutbox); });
+  window.addEventListener('offline',updateNet);
+  document.addEventListener('visibilitychange',function(){ if(!document.hidden&&UID){ if(OFFLINE) goOnline(); else if(ROLE==='station') flushOutbox().then(afterOutbox); } });
 
 
   /* ---------- التنبيهات: كل قاعدة = زناد + شرط + إجراء ---------- */
@@ -580,7 +681,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b7';
+  var APP_BUILD='b8';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -708,16 +809,30 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       return '<div class="tankrow"><div style="display:flex;justify-content:space-between;gap:8px"><span>'+esc(tankLabel(st,t))+'</span><span><span class="num">'+fmt(q)+'</span> من <span class="num">'+fmt(t.cap)+'</span></span></div><div class="bar" aria-hidden="true"><i class="'+barCls(p,t)+'" style="width:'+Math.min(p*100,100)+'%"></i></div></div>';
     }).join('');
   }
-  function summaryHTML(st,d,e){
+  function summaryHTML(st,d,e,ro){
     var html='<div style="margin-top:12px">';
     fuelsOf(st).forEach(function(f){
       var v=fuelVar(st,f,d,e); if(!v.has) return;
       html+='<div class="fuelblock"><h3>'+esc(f)+'</h3><div class="calc">'+cellKV('مبيعات اليوم',fmt(v.sales))+cellKV('الوارد',fmt(v.recv))+cellKV('المتوقع',fmt(v.exp))+cellKV('الشيش',fmt(v.act))+cellKV('الفرق',v.gap?'—':sgn(v.diff))
         +'<div><div class="k">الحالة</div>'+varChip(v)+'</div></div>'+tankLines(st,f,e)+'</div>';
     });
-    if(e.versions&&e.versions.length){ var lv=e.versions[e.versions.length-1]; html+='<div class="hint" style="margin-top:12px">آخر تصحيح: '+esc(dshort(lv.on))+' '+esc(lv.at)+' · السبب: '+esc(lv.reason)+'</div>'; }
-    html+=(canEdit(st.id,d)?'<div class="btnrow" style="margin-top:16px"><button type="button" class="btn ghost" data-act="fixDay" data-d="'+d+'">تعديل اليومية</button></div>':'')+'</div>';
+    if(!ro&&e.versions&&e.versions.length){ var lv=e.versions[e.versions.length-1]; html+='<div class="hint" style="margin-top:12px">آخر تصحيح: '+esc(dshort(lv.on))+' '+esc(lv.at)+' · السبب: '+esc(lv.reason)+'</div>'; }
+    html+=(!ro&&canEdit(st.id,d)?'<div class="btnrow" style="margin-top:16px"><button type="button" class="btn ghost" data-act="fixDay" data-d="'+d+'">تعديل اليومية</button></div>':'')+'</div>';
     return html;
+  }
+  /* يوميات محفوظة على الهاتف بانتظار الشبكة */
+  function pendingHTML(st){
+    var items=obFor(st.id).sort(function(a,b){ return a.day<b.day?-1:1; }); if(!items.length) return '';
+    var html='<section class="panel"><div class="panel-head"><h2>إرسال مؤجل</h2><span class="muted">محفوظة على هذا الهاتف</span></div>';
+    items.forEach(function(it){
+      var wait=it.state==='wait';
+      html+='<div class="corr"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center"><strong>'+esc(dlabel(it.day))+'</strong><span class="chip '+(wait?'warn':'crit')+'">'+(wait?'بانتظار الإرسال':'لم تُقبل')+'</span></div>'
+        +(wait?'<div class="hint">حُفظت على هاتفك الساعة '+esc(bTimeOf(it.at))+' وستُرسل تلقائياً عند عودة الشبكة. لا تمسح بيانات التطبيق قبل ذلك.</div>':'<div class="result bad" style="margin-top:8px">'+esc(it.err||'لم تُقبل')+'</div>')
+        +summaryHTML(st,it.day,it.ne,true)
+        +'<div class="btnrow" style="margin-top:12px">'+(wait?'<button type="button" class="btn small" data-act="obRetry">إرسال الآن</button><button type="button" class="btn ghost small" data-act="obEdit" data-d="'+it.day+'">تعديل القيم قبل الإرسال</button>':'')
+        +'<button type="button" class="btn danger small" data-act="obDrop" data-d="'+it.day+'">حذف من الهاتف</button></div></div>';
+    });
+    return html+'</section>';
   }
   function formHTML(st,fv){
     var d=fv.date, e=getE(st.id,d), edit=fv.mode==='edit', dr=(!edit&&drafts[st.id+'|'+d])||null, fuels=fuelsOf(st);
@@ -752,7 +867,9 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var td=today(), a=dates(st.id), fs=a[0]||null, rows='', N=7;
     for(var k=0;k<N;k++){
       var d=addDays(td,-k), e=getE(st.id,d), status='', sales='—', vr='', act='';
-      if(e){
+      var pe=e?null:obFind(st.id,d);
+      if(pe){ status='<span class="chip '+(pe.state==='wait'?'warn':'crit')+'">'+(pe.state==='wait'?'بانتظار الإرسال':'لم تُقبل')+'</span>'; }
+      else if(e){
         status='<span class="chip ok">أُرسلت '+esc(e.time||'')+'</span>'+(e.versions&&e.versions.length?' <span class="chip info">معدّلة</span>':'');
         sales=fuelsOf(st).map(function(f){ return esc(f)+' <span class="num">'+fmt((e.sales&&e.sales[f])||0)+'</span>'; }).join(' · ');
         var bad=[], gap=false;
@@ -767,21 +884,24 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
   function renderStation(root){
     var st=byId(currentStation)||myStations()[0]; currentStation=st.id;
-    var td=today(), te=getE(st.id,td), fv=stView.fv;
+    var td=today(), te=getE(st.id,td), fv=stView.fv, tp=te?null:obFind(st.id,td);
     if(fv&&fv.mode==='edit'&&!getE(st.id,fv.date)) fv=stView.fv=null;
-    if(!fv&&!te) fv={date:td,mode:'new'};
+    if(fv&&fv.mode==='new'&&fv.date===td&&tp) fv=stView.fv=null;
+    if(!fv&&!te&&!tp) fv={date:td,mode:'new'};
     var opts=myStations().map(function(s){return '<option value="'+s.id+'"'+(s.id===st.id?' selected':'')+'>'+esc(s.name)+(getE(s.id,td)?' · أُرسلت':'')+'</option>';}).join('');
     var chip, title;
     if(fv){
       title=(fv.mode==='edit'?'تصحيح يومية ':'يومية ')+esc(dlabel(fv.date));
       chip=fv.mode==='edit'?'<span class="chip warn">تصحيح</span>':(fv.date===td?'<span class="chip info">لم تُرسل بعد</span>':'<span class="chip warn">إدخال متأخر</span>');
-    } else { title='يومية اليوم'; chip='<span class="chip ok">أُرسلت '+esc(te.time||'')+'</span>'+(te.versions&&te.versions.length?' <span class="chip info">معدّلة</span>':''); }
+    } else if(!te){ title='يومية اليوم'; chip='<span class="chip '+(tp.state==='wait'?'warn':'crit')+'">'+(tp.state==='wait'?'بانتظار الإرسال':'لم تُقبل')+'</span>'; }
+    else { title='يومية اليوم'; chip='<span class="chip ok">أُرسلت '+esc(te.time||'')+'</span>'+(te.versions&&te.versions.length?' <span class="chip info">معدّلة</span>':''); }
     var html='<div class="stack">'+(stView.msg||'');
     stView.msg='';
     html+='<section class="panel"><div class="panel-head"><h2>'+title+'</h2>'+chip+'</div>'
       +'<label for="stsel">المحطة</label><select id="stsel">'+opts+'</select>'
       +(st.loc?'<div class="hint">الموقع: '+locHTML(st.loc)+'</div>':'')
-      +(fv?formHTML(st,fv):summaryHTML(st,td,te))+'</section>'
+      +(fv?formHTML(st,fv):(te?summaryHTML(st,td,te):'<p class="hint" style="margin-top:12px">يومية اليوم محفوظة على هذا الهاتف، وتفاصيلها في قسم «إرسال مؤجل» أدناه.</p>'))+'</section>'
+      +pendingHTML(st)
       +historyHTML(st);
     html+='</div>';
     root.innerHTML=html;
@@ -875,10 +995,19 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
           var n=getAlerts().filter(function(a){return a.st===st.id;}).length;
           msg='<div class="result">تم الإرسال الساعة '+ne.time+'. '+(n?'ظهرت '+n+' ملاحظة على '+esc(st.name)+' عند مسؤول التوزيع والمدير.':'لا توجد ملاحظات على هذه اليومية.')+'</div>';
         }
-        clearDraft(st.id,d);
+        clearDraft(st.id,d); saveCache();
         stView.fv=null; stView.msg=msg;
         renderStation(root);
       }).catch(function(err){
+        /* انقطاع الشبكة: نحفظ اليومية الجديدة على الهاتف وتُرسل تلقائياً لاحقاً (التصحيحات تحتاج اتصالاً) */
+        if(!isEd&&ROLE==='station'&&isNetErr(err)){
+          if(obAdd(st.id,d,ne)){
+            clearDraft(st.id,d); stView.fv=null;
+            stView.msg='<div class="result" style="background:var(--warn-bg);color:var(--warn)">لا يوجد اتصال بالإنترنت. حُفظت اليومية على هاتفك الساعة '+nowHM()+' وستُرسل تلقائياً عند عودة الشبكة. لا تمسح بيانات التطبيق قبل ذلك.</div>';
+            updateNet(); renderStation(root); return;
+          }
+          sbtn.disabled=false; res.innerHTML='<div class="result bad">لا يوجد اتصال، وتعذّر الحفظ على الهاتف (الذاكرة ممتلئة أو التصفح الخاص). لا تغلق الصفحة وأعد المحاولة عند عودة الشبكة.</div>'; return;
+        }
         sbtn.disabled=false;
         res.innerHTML='<div class="result bad">'+esc(DB.errText(err))+'</div>';
       });
@@ -1152,6 +1281,26 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     if(act==='fixDay'){ stView.fv={date:dd,mode:'edit'}; renderStation(main); window.scrollTo(0,0); return; }
     if(act==='addDay'){ stView.fv={date:dd,mode:'new'}; renderStation(main); window.scrollTo(0,0); return; }
     if(act==='cancelForm'){ stView.fv=null; renderStation(main); return; }
+    if(act==='obRetry'){
+      b.disabled=true;
+      flushOutbox().then(function(){ if(obCount()&&navigator.onLine&&!OFFLINE) stView.msg='<div class="result bad">تعذّر الإرسال الآن. ستُعاد المحاولة تلقائياً.</div>'; afterOutbox(); });
+      return;
+    }
+    if(act==='obEdit'){
+      var oit=obFind(currentStation,dd); if(!oit) return;
+      var raw={sales:{},recv:{},dip:{}};
+      Object.keys(oit.ne.sales||{}).forEach(function(k){ raw.sales[k]=String(oit.ne.sales[k]); });
+      Object.keys(oit.ne.recv||{}).forEach(function(k){ raw.recv[k]=String(oit.ne.recv[k]); });
+      Object.keys(oit.ne.dip||{}).forEach(function(k){ raw.dip[k]=String(oit.ne.dip[k]); });
+      putDraft(currentStation,dd,raw);
+      obSet(obGet().filter(function(x){ return !(x.sid===currentStation&&x.day===dd); }));
+      stView.fv={date:dd,mode:'new'}; updateNet(); renderStation(main); window.scrollTo(0,0); return;
+    }
+    if(act==='obDrop'){
+      if(!window.confirm('حذف هذه اليومية من الهاتف؟ لن تُرسل، ويجب إدخالها من جديد.')) return;
+      obSet(obGet().filter(function(x){ return !(x.sid===currentStation&&x.day===dd); }));
+      updateNet(); renderStation(main); return;
+    }
     if(act==='mgrOpen'){ currentStation=b.getAttribute('data-sid'); stView.mgr=true; stView.fv={date:today(),mode:'edit'}; go('station'); return; }
     if(act==='mgrYest'){ var ysid=b.getAttribute('data-sid'), yd2=addDays(today(),-1); currentStation=ysid; stView.mgr=true; stView.fv={date:yd2,mode:getE(ysid,yd2)?'edit':'new'}; go('station'); return; }
     /* المدير */
@@ -1174,15 +1323,34 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     document.querySelectorAll('.tabs button').forEach(function(b){ b.hidden=ALLOWED.indexOf(b.getAttribute('data-view'))<0; });
     document.getElementById('who').textContent=(safeName(MY_NAME)?safeName(MY_NAME)+' · ':'')+(ROLE_LABEL[ROLE]||'');
   }
+  /* بدء التطبيق من نسخة الهاتف عند انقطاع الشبكة (لمدير المحطة فقط) */
+  async function offlineStart(){
+    var uid=storedUid(); if(!uid) return false;
+    var c=readCache(uid); if(!c||!c.profile||c.profile.role!=='station'||!c.cfg||!c.entries) return false;
+    UID=uid; ROLE='station'; MY_STATION=c.profile.station_id; MY_NAME=c.profile.full_name||'';
+    cfg=c.cfg; entries=c.entries; dirty(); OFFLINE=true; loadDrafts();
+    currentStation=MY_STATION||'';
+    applyRole(); updateHeader(); loginEl.hidden=true; updateNet();
+    go('station');
+    return true;
+  }
   async function start(session){
     var u=session.user; UID=u.id;
     var p=await sb.from('profiles').select('role,station_id,full_name').eq('id',UID).single();
-    if(p.error){ await sb.auth.signOut(); showLogin(DB.errText(p.error)); return; }
+    if(p.error){
+      /* فشل الشبكة ليس سبباً لتسجيل الخروج: نبدأ من نسخة الهاتف إن وُجدت */
+      if(isNetErr(p.error)&&await offlineStart()) return;
+      if(isNetErr(p.error)){ showLogin(DB.errText(p.error)); return; }
+      await sb.auth.signOut(); showLogin(DB.errText(p.error)); return;
+    }
     if(!p.data.role){ await sb.auth.signOut(); showLogin('حسابك لم يُفعَّل بعد. تواصل مع المدير ليحدد صلاحيتك.'); return; }
     ROLE=p.data.role; MY_STATION=p.data.station_id; MY_NAME=p.data.full_name||'';
-    await DB.loadAll(); loadDrafts();
+    try{ await DB.loadAll(); }
+    catch(e){ if(ROLE==='station'&&isNetErr(e)&&await offlineStart()) return; throw e; }
+    OFFLINE=false; loadDrafts(); saveCache();
     if(ROLE==='station') currentStation=MY_STATION||'';
-    applyRole(); updateHeader(); loginEl.hidden=true;
+    applyRole(); updateHeader(); loginEl.hidden=true; updateNet();
+    if(ROLE==='station') flushOutbox().then(afterOutbox);
     var h=location.hash.replace('#','');
     go(ALLOWED.indexOf(h)>=0?h:(ROLE==='manager'?(cfg.stations.length?'manager':'settings'):ALLOWED[0]));
     if(window.__timer) clearInterval(window.__timer);
@@ -1194,7 +1362,8 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
   async function refresh(silent){
     var bar=document.getElementById('netbar');
-    try{ await DB.loadRecent(); bar.hidden=true; updateHeader(); go(location.hash.replace('#','')); }
+    if(OFFLINE){ await goOnline(); if(OFFLINE) updateNet(); return; }
+    try{ await DB.loadRecent(); bar.hidden=true; bar.removeAttribute('data-n'); saveCache(); updateHeader(); go(location.hash.replace('#','')); updateNet(); }
     catch(e){ bar.textContent='تعذّر التحديث: '+DB.errText(e); bar.hidden=false; }
   }
   document.getElementById('lform').addEventListener('submit',async function(ev){
@@ -1217,11 +1386,16 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     try{ await start(r.data.session); }catch(e){ showLogin(DB.errText(e)); }
   });
   document.getElementById('lshow').addEventListener('change',function(ev){ document.getElementById('lpass').type=ev.target.checked?'text':'password'; });
-  document.getElementById('logout').addEventListener('click',async function(){ await sb.auth.signOut(); location.reload(); });
+  document.getElementById('logout').addEventListener('click',async function(){ try{ localStorage.removeItem('lastUid'); }catch(e){} await sb.auth.signOut(); location.reload(); });
   document.getElementById('refresh').addEventListener('click',function(){ refresh(false); });
   (async function(){
-    try{ var s=await sb.auth.getSession(); if(s.data.session) await start(s.data.session); else showLogin(''); }
-    catch(e){ showLogin(DB.errText(e)); }
+    try{
+      var s=await sb.auth.getSession();
+      if(s.data.session) await start(s.data.session);
+      else if((!navigator.onLine||(s.error&&isNetErr(s.error)))&&await offlineStart()) { /* بدأنا من نسخة الهاتف */ }
+      else showLogin('');
+    }
+    catch(e){ if(isNetErr(e)&&await offlineStart()) return; showLogin(DB.errText(e)); }
   })();
 })();
 </script>
