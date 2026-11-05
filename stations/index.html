@@ -232,7 +232,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   /* ---------- سجل الأيام ---------- */
   function dates(sid){ if(!idx[sid]) idx[sid]=Object.keys(entries[sid]||{}).sort(); return idx[sid]; }
   function dirty(){ idx={}; }
-  function myStations(){ return ROLE==='station'?cfg.stations.filter(function(s){return s.id===MY_STATION;}):cfg.stations; }
+  function myStations(){ return ROLE==='station'?cfg.stations.filter(function(s){return MY_STATIONS.indexOf(s.id)>=0;}):cfg.stations; }
   function over(diff){ return cfg.tol!=null && Math.abs(diff)>cfg.tol; }
   function getE(sid,d){ return entries[sid]&&entries[sid][d]; }
   function setE(sid,d,e){ (entries[sid]=entries[sid]||{})[d]=e; dirty(); }
@@ -274,7 +274,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     fuelsOf(st).forEach(function(f){ var v=fuelVar(st,f,nd,ne); r.diffs[f]=(v.has&&!v.gap)?v.diff:null; });
     return r;
   }
-  function canEdit(sid,d){ var t=today(); if(ROLE==='station') return sid===MY_STATION && d===t; return ROLE==='manager' && (d===t || d===addDays(t,-1)); }
+  function canEdit(sid,d){ var t=today(); if(ROLE==='station') return MY_STATIONS.indexOf(sid)>=0 && d===t; return ROLE==='manager' && (d===t || d===addDays(t,-1)); }
 
   /* ---------- الاتصال بقاعدة البيانات ---------- */
   var SB_URL='https://ljigywbdqxyapwwhbxdu.supabase.co';
@@ -282,7 +282,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   /* مهلة 20 ثانية لكل طلب حتى لا يعلق الإرسال على شبكة ضعيفة */
   function tfetch(u,o){ o=o||{}; var c=new AbortController(), t=setTimeout(function(){ c.abort(); },20000); if(o.signal){ if(o.signal.aborted) c.abort(); else o.signal.addEventListener('abort',function(){ c.abort(); }); } o.signal=c.signal; return fetch(u,o).finally(function(){ clearTimeout(t); }); }
   var sb=window.supabase.createClient(SB_URL,SB_KEY,{global:{fetch:tfetch}});
-  var ROLE=null, UID=null, MY_STATION=null, MY_NAME='', ALLOWED=[];
+  var ROLE=null, UID=null, MY_STATION=null, MY_STATIONS=[], MY_NAME='', ALLOWED=[];
   var ROLE_LABEL={manager:'المدير',distribution:'مسؤول التوزيع',station:'مدير المحطة'};
   function bParts(d){ var o={}; new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Beirut',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d).forEach(function(p){ o[p.type]=p.value; }); return o; }
   function bDateOf(iso){ var o=bParts(new Date(iso)); return o.year+'-'+o.month+'-'+o.day; }
@@ -375,7 +375,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       return localStorage.getItem('lastUid')||null;
     }catch(e){ return null; }
   }
-  function saveCache(){ if(ROLE!=='station'||!UID) return; try{ localStorage.setItem('cache:'+UID,JSON.stringify({at:Date.now(),profile:{role:ROLE,station_id:MY_STATION,full_name:MY_NAME},cfg:cfg,entries:entries})); localStorage.setItem('lastUid',UID); }catch(e){} }
+  function saveCache(){ if(ROLE!=='station'||!UID) return; try{ localStorage.setItem('cache:'+UID,JSON.stringify({at:Date.now(),profile:{role:ROLE,station_id:MY_STATION,station_ids:MY_STATIONS,full_name:MY_NAME},cfg:cfg,entries:entries})); localStorage.setItem('lastUid',UID); }catch(e){} }
   function readCache(uid){ try{ var s=localStorage.getItem('cache:'+uid); return s?JSON.parse(s):null; }catch(e){ return null; } }
   function obKey(){ return 'outbox:'+UID; }
   function obGet(){ try{ var a=JSON.parse(localStorage.getItem(obKey())||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
@@ -519,10 +519,10 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var rows=USERS.map(function(u){
       var me=u.id===UID;
       return '<tr><td><strong>'+esc(safeName(u.full_name)||(me?'حسابك':''))+'</strong><div class="muted num" dir="ltr" style="text-align:right">'+esc(shownLogin(u.email))+'</div></td>'
-        +'<td>'+(u.role?esc(ROLE_LABEL[u.role]):'<span class="chip warn">بلا صلاحية</span>')+(u.station_id?'<div class="muted">'+esc(stName[u.station_id]||'')+'</div>':'')+'</td>'
-        +'<td>'+(me?'<span class="muted">حسابك</span>':'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="text" class="num-in" id="np_'+u.id+'" placeholder="كلمة سر جديدة" dir="ltr" style="max-width:150px" autocomplete="off"><button type="button" class="btn ghost small" data-act="upass" data-id="'+u.id+'">تغيير</button><button type="button" class="btn danger small" data-act="udel" data-id="'+u.id+'">'+(confirmU===u.id?'تأكيد الحذف':'حذف')+'</button></div>')+'</td></tr>';
+        +'<td>'+(u.role?esc(ROLE_LABEL[u.role]):'<span class="chip warn">بلا صلاحية</span>')+((u.station_ids&&u.station_ids.length)?'<div class="muted">'+u.station_ids.map(function(i){return esc(stName[i]||'');}).join('، ')+'</div>':(u.station_id?'<div class="muted">'+esc(stName[u.station_id]||'')+'</div>':''))+'</td>'
+        +'<td>'+(me?'<span class="muted">حسابك</span>':'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="text" class="num-in" id="np_'+u.id+'" placeholder="كلمة سر جديدة" dir="ltr" style="max-width:150px" autocomplete="off"><button type="button" class="btn ghost small" data-act="upass" data-id="'+u.id+'">تغيير</button><button type="button" class="btn ghost small" data-act="ust" data-id="'+u.id+'">المحطات</button><button type="button" class="btn danger small" data-act="udel" data-id="'+u.id+'">'+(confirmU===u.id?'تأكيد الحذف':'حذف')+'</button></div>')+'</td></tr>';
     }).join('');
-    var stOpts='<option value="">اختر المحطة</option>'+cfg.stations.map(function(s){ return '<option value="'+s.id+'">'+esc(s.name)+'</option>'; }).join('');
+    var stOpts=cfg.stations.map(function(s){ return '<label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" class="u_stc" value="'+s.id+'"> '+esc(s.name)+'</label>'; }).join('');
     el.innerHTML='<div class="panel-head"><h2>المستخدمون</h2><span class="muted">'+USERS.length+' حساب</span></div>'
       +'<div class="tablewrap"><table><thead><tr><th>المستخدم</th><th>الدور والمحطة</th><th>إجراءات</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
       +'<h3 style="margin:18px 0 8px;font-size:15px">إضافة مستخدم</h3><div class="grid2">'
@@ -530,7 +530,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       +'<div><label for="u_login">اسم الدخول (أو بريد)</label><input type="text" id="u_login" dir="ltr" autocomplete="off" autocapitalize="none" placeholder="مثال: tripoli1"></div>'
       +'<div><label for="u_pass">كلمة السر (8 أحرف على الأقل)</label><input type="text" id="u_pass" dir="ltr" autocomplete="off"></div>'
       +'<div><label for="u_role">الدور</label><select id="u_role"><option value="station">مدير محطة</option><option value="distribution">مسؤول التوزيع</option><option value="manager">مدير</option></select></div>'
-      +'<div><label for="u_st">المحطة (لمدير المحطة)</label><select id="u_st">'+stOpts+'</select></div></div>'
+      +'<div style="grid-column:1/-1"><label>المحطات (لمدير المحطة، يمكن اختيار أكثر من واحدة)</label><div id="u_st" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px;max-height:200px;overflow:auto">'+stOpts+'</div></div></div>'
       +'<div class="btnrow" style="margin-top:12px"><button type="button" class="btn" data-act="uadd">إضافة المستخدم</button></div>'
       +'<div id="umsg">'+usersMsg+'</div>';
     usersMsg='';
@@ -540,10 +540,21 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     try{
       if(act==='uadd'){
         var lg=document.getElementById('u_login').value.trim().toLowerCase(); if(lg.indexOf('@')<0) lg=lg+LOGIN_DOMAIN;
-        var body={action:'create',email:lg,password:document.getElementById('u_pass').value,full_name:document.getElementById('u_name').value.trim(),role:document.getElementById('u_role').value,station_id:document.getElementById('u_st').value||null};
+        var body={action:'create',email:lg,password:document.getElementById('u_pass').value,full_name:document.getElementById('u_name').value.trim(),role:document.getElementById('u_role').value,station_ids:Array.prototype.map.call(document.querySelectorAll('#u_st .u_stc:checked'),function(c){return c.value;})};
         if(!body.full_name){ box('<div class="result bad">اكتب اسم المستخدم</div>'); return; }
         box('<div class="result">جارٍ الإضافة...</div>'); await callUsers(body);
         USERS=null; usersMsg='<div class="result">تمت إضافة المستخدم. أعطِه اسم الدخول وكلمة السر.</div>'; renderUsers();
+      } else if(act==='ust'){
+        var uid3=b.getAttribute('data-id'), uu=USERS.filter(function(x){return x.id===uid3;})[0]||{}, cur=uu.station_ids||[];
+        var h='<div class="result"><strong>محطات '+esc(safeName(uu.full_name))+'</strong><div id="ust_box" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px;margin:8px 0">'
+          +cfg.stations.map(function(s){ return '<label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" class="ust_c" value="'+s.id+'"'+(cur.indexOf(s.id)>=0?' checked':'')+'> '+esc(s.name)+'</label>'; }).join('')
+          +'</div><button type="button" class="btn small" data-act="ustsave" data-id="'+uid3+'">حفظ</button></div>';
+        box(h);
+      } else if(act==='ustsave'){
+        var ids=Array.prototype.map.call(document.querySelectorAll('#ust_box .ust_c:checked'),function(c){return c.value;});
+        if(!ids.length){ box('<div class="result bad">اختر محطة واحدة على الأقل</div>'); return; }
+        box('<div class="result">جارٍ الحفظ...</div>'); await callUsers({action:'setstations',id:b.getAttribute('data-id'),station_ids:ids});
+        USERS=null; usersMsg='<div class="result">تم حفظ المحطات.</div>'; renderUsers();
       } else if(act==='upass'){
         var id=b.getAttribute('data-id'), pw=document.getElementById('np_'+id).value;
         box('<div class="result">جارٍ التغيير...</div>'); await callUsers({action:'setpass',id:id,password:pw});
@@ -681,7 +692,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b8';
+  var APP_BUILD='b9';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -1261,7 +1272,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var b=ev.target.closest('[data-act]'); if(!b||b.disabled) return;
     var act=b.getAttribute('data-act'), d=settingsDraft, i=+b.getAttribute('data-i'), j=+b.getAttribute('data-j'), dd=b.getAttribute('data-d');
     var st=byId(currentStation);
-    if(act==='uadd'||act==='upass'||act==='udel'){ usersAction(act,b); return; }
+    if(act==='uadd'||act==='upass'||act==='udel'||act==='ust'||act==='ustsave'){ usersAction(act,b); return; }
     if(act==='expxls'){ doExport(); return; }
     /* الإعدادات */
     if(['addStation','addTank','delTank','delStation','addFuel','delFuel','discard','save'].indexOf(act)>=0){
@@ -1327,9 +1338,9 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   async function offlineStart(){
     var uid=storedUid(); if(!uid) return false;
     var c=readCache(uid); if(!c||!c.profile||c.profile.role!=='station'||!c.cfg||!c.entries) return false;
-    UID=uid; ROLE='station'; MY_STATION=c.profile.station_id; MY_NAME=c.profile.full_name||'';
+    UID=uid; ROLE='station'; MY_STATION=c.profile.station_id; MY_STATIONS=c.profile.station_ids||(MY_STATION?[MY_STATION]:[]); MY_NAME=c.profile.full_name||'';
     cfg=c.cfg; entries=c.entries; dirty(); OFFLINE=true; loadDrafts();
-    currentStation=MY_STATION||'';
+    currentStation=MY_STATIONS[0]||MY_STATION||'';
     applyRole(); updateHeader(); loginEl.hidden=true; updateNet();
     go('station');
     return true;
@@ -1345,10 +1356,12 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     }
     if(!p.data.role){ await sb.auth.signOut(); showLogin('حسابك لم يُفعَّل بعد. تواصل مع المدير ليحدد صلاحيتك.'); return; }
     ROLE=p.data.role; MY_STATION=p.data.station_id; MY_NAME=p.data.full_name||'';
+    MY_STATIONS=MY_STATION?[MY_STATION]:[];
+    if(ROLE==='station'){ var us=await sb.from('user_stations').select('station_id').eq('user_id',UID); if(us.error&&isNetErr(us.error)&&await offlineStart()) return; if(us.data&&us.data.length){ MY_STATIONS=us.data.map(function(r){return r.station_id;}); if(MY_STATIONS.indexOf(MY_STATION)<0) MY_STATION=MY_STATIONS[0]; else { MY_STATIONS.splice(MY_STATIONS.indexOf(MY_STATION),1); MY_STATIONS.unshift(MY_STATION); } } }
     try{ await DB.loadAll(); }
     catch(e){ if(ROLE==='station'&&isNetErr(e)&&await offlineStart()) return; throw e; }
     OFFLINE=false; loadDrafts(); saveCache();
-    if(ROLE==='station') currentStation=MY_STATION||'';
+    if(ROLE==='station') currentStation=MY_STATIONS[0]||MY_STATION||'';
     applyRole(); updateHeader(); loginEl.hidden=true; updateNet();
     if(ROLE==='station') flushOutbox().then(afterOutbox);
     var h=location.hash.replace('#','');

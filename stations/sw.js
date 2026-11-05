@@ -1,5 +1,5 @@
 /* خدمة العمل بلا شبكة وإشعارات الدفع. غيّر رقم النسخة عند أي تعديل في هذا الملف */
-var V = 'stations-v8';
+var V = 'stations-v9';
 var SHELL = ['./', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 var CDN = [
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js',
