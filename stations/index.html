@@ -220,9 +220,10 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   function ub(a,x){ var lo=0,hi=a.length; while(lo<hi){ var m=(lo+hi)>>1; if(a[m]<=x) lo=m+1; else hi=m; } return lo; }
 
   /* ---------- الاستعلامات من الإعدادات ---------- */
+  function R(){ return cfg.stations.filter(function(s){return !s.test;}); }
   function byId(id){ return cfg.stations.filter(function(s){return s.id===id;})[0]; }
   function fuelsOf(st){ var o=[]; st.tanks.forEach(function(t){ if(o.indexOf(t.fuel)<0) o.push(t.fuel); }); return o; }
-  function allFuels(){ var o=[]; cfg.stations.forEach(function(s){ fuelsOf(s).forEach(function(f){ if(o.indexOf(f)<0) o.push(f); }); }); return o; }
+  function allFuels(){ var o=[]; R().forEach(function(s){ fuelsOf(s).forEach(function(f){ if(o.indexOf(f)<0) o.push(f); }); }); return o; }
   function tanksOf(st,fuel){ return st.tanks.filter(function(t){return t.fuel===fuel;}); }
   function tankLabel(st,t){ if(t.name) return t.fuel+' · '+t.name; var n=0; for(var i=0;i<st.tanks.length;i++){ if(st.tanks[i].fuel===t.fuel){ n++; if(st.tanks[i]===t) break; } } return t.fuel+' · خزان '+n; }
   function lvlT(p,t){ return p<t.alert/200?'crit':(p<t.alert/100?'warn':'ok'); }
@@ -316,7 +317,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       r.forEach(function(x){ if(x.error) throw x.error; });
       var s=r[0].data;
       cfg={fuels:s.fuels||[],tol:s.tol,deadline:s.deadline,fill:s.fill,daysAlert:s.days_alert,
-        stations:r[1].data.map(function(x){ return {id:x.id,name:x.name,loc:x.loc||'',
+        stations:r[1].data.map(function(x){ return {id:x.id,name:x.name,loc:x.loc||'',test:!!x.is_test,
           tanks:r[2].data.filter(function(t){return t.station_id===x.id;}).map(function(t){ return {id:t.id,name:t.name||'',fuel:t.fuel,cap:t.cap,opening:t.opening,alert:t.alert}; })}; })};
       dirty();
     },
@@ -342,7 +343,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       var oldT=[]; cfg.stations.forEach(function(s){ s.tanks.forEach(function(t){ oldT.push(t.id); }); });
       var newT=[]; nc.stations.forEach(function(s){ s.tanks.forEach(function(t){ newT.push(t.id); }); });
       var r;
-      r=await sb.from('stations').upsert(nc.stations.map(function(s,i){ return {id:s.id,name:s.name,loc:s.loc||null,sort:i}; })); if(r.error) throw r.error;
+      r=await sb.from('stations').upsert(nc.stations.map(function(s,i){ return {id:s.id,name:s.name,loc:s.loc||null,is_test:!!s.test,sort:i}; })); if(r.error) throw r.error;
       var rmT=oldT.filter(function(x){return newT.indexOf(x)<0 && newS.indexOf(cfg.stations.filter(function(s){return s.tanks.some(function(t){return t.id===x;});})[0].id)>=0;});
       if(rmT.length){ r=await sb.from('tanks').delete().in('id',rmT); if(r.error) throw r.error; }
       var trows=[]; nc.stations.forEach(function(s){ s.tanks.forEach(function(t,j){ trows.push({id:t.id,station_id:s.id,name:t.name||null,fuel:t.fuel,cap:t.cap,opening:t.opening,alert:t.alert,sort:j}); }); });
@@ -460,7 +461,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   /* ---------- التنبيهات: كل قاعدة = زناد + شرط + إجراء ---------- */
   function getAlerts(){
     var out=[], td=today(), late=cfg.deadline!=null && bHour()>=cfg.deadline;
-    cfg.stations.forEach(function(st){
+    R().forEach(function(st){
       var a=dates(st.id), last=a.length?a[a.length-1]:null, e=last?entries[st.id][last]:null;
       if(!getE(st.id,td)) out.push({sev:late?'warn':'info',st:st.id,title:st.name+': لم تُرسل اليومية بعد',detail:cfg.deadline==null?'بانتظار الإرسال':(late?'تجاوزت موعد '+cfg.deadline+':00':'بانتظار الإرسال قبل '+cfg.deadline+':00'),to:'تذكير لمدير المحطة، ثم إشعار للمدير'});
       for(var k=1;k<=2;k++){
@@ -522,7 +523,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
         +'<td>'+(u.role?esc(ROLE_LABEL[u.role]):'<span class="chip warn">بلا صلاحية</span>')+((u.station_ids&&u.station_ids.length)?'<div class="muted">'+u.station_ids.map(function(i){return esc(stName[i]||'');}).join('، ')+'</div>':(u.station_id?'<div class="muted">'+esc(stName[u.station_id]||'')+'</div>':''))+'</td>'
         +'<td>'+(me?'<span class="muted">حسابك</span>':'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="text" class="num-in" id="np_'+u.id+'" placeholder="كلمة سر جديدة" dir="ltr" style="max-width:150px" autocomplete="off"><button type="button" class="btn ghost small" data-act="upass" data-id="'+u.id+'">تغيير</button><button type="button" class="btn ghost small" data-act="ust" data-id="'+u.id+'">المحطات</button><button type="button" class="btn danger small" data-act="udel" data-id="'+u.id+'">'+(confirmU===u.id?'تأكيد الحذف':'حذف')+'</button></div>')+'</td></tr>';
     }).join('');
-    var stOpts=cfg.stations.map(function(s){ return '<label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" class="u_stc" value="'+s.id+'"> '+esc(s.name)+'</label>'; }).join('');
+    var stOpts=R().map(function(s){ return '<label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" class="u_stc" value="'+s.id+'"> '+esc(s.name)+'</label>'; }).join('');
     el.innerHTML='<div class="panel-head"><h2>المستخدمون</h2><span class="muted">'+USERS.length+' حساب</span></div>'
       +'<div class="tablewrap"><table><thead><tr><th>المستخدم</th><th>الدور والمحطة</th><th>إجراءات</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
       +'<h3 style="margin:18px 0 8px;font-size:15px">إضافة مستخدم</h3><div class="grid2">'
@@ -547,7 +548,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       } else if(act==='ust'){
         var uid3=b.getAttribute('data-id'), uu=USERS.filter(function(x){return x.id===uid3;})[0]||{}, cur=uu.station_ids||[];
         var h='<div class="result"><strong>محطات '+esc(safeName(uu.full_name))+'</strong><div id="ust_box" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:4px;margin:8px 0">'
-          +cfg.stations.map(function(s){ return '<label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" class="ust_c" value="'+s.id+'"'+(cur.indexOf(s.id)>=0?' checked':'')+'> '+esc(s.name)+'</label>'; }).join('')
+          +R().map(function(s){ return '<label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" class="ust_c" value="'+s.id+'"'+(cur.indexOf(s.id)>=0?' checked':'')+'> '+esc(s.name)+'</label>'; }).join('')
           +'</div><button type="button" class="btn small" data-act="ustsave" data-id="'+uid3+'">حفظ</button></div>';
         box(h);
       } else if(act==='ustsave'){
@@ -639,7 +640,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
         lg:['المحطة','تاريخ اليومية','تاريخ التعديل','وقت التعديل','السبب','النسخة القديمة']
       };
       var R={sales:[H.sales],recv:[H.recv],dip:[H.dip],vr:[H.vr],tk:[H.tk],lg:[H.lg]}, days=0;
-      cfg.stations.forEach(function(st){
+      R().forEach(function(st){
         dates(st.id).forEach(function(d){
           if(!inR(d)) return;
           var e=entries[st.id][d]; days++;
@@ -664,7 +665,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
         [],
         ['تاريخ التصدير (بتوقيت بيروت)',stamp],
         ['الفترة',expR.all?'كل السجل':(from+' إلى '+to)],
-        ['عدد المحطات',cfg.stations.length],
+        ['عدد المحطات',R().length],
         ['عدد اليوميات في الملف',days],
         ['صفوف المبيعات',R.sales.length-1],
         ['صفوف المشتريات',R.recv.length-1],
@@ -686,13 +687,13 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       XLSX.writeFile(wb,'stations-backup-'+bDateOf(iso)+(expR.all?'':'_'+from+'_to_'+to)+'.xlsx',{compression:true});
       try{ localStorage.setItem('lastExport:'+UID,stamp); }catch(e){}
       var el=document.getElementById('elast'); if(el) el.innerHTML=lastExportHTML();
-      box.innerHTML='<div class="result">تم تجهيز الملف: '+days+' يومية من '+cfg.stations.length+' محطات. تحقق من مجلد التنزيلات في هاتفك.</div>';
+      box.innerHTML='<div class="result">تم تجهيز الملف: '+days+' يومية من '+R().length+' محطات. تحقق من مجلد التنزيلات في هاتفك.</div>';
     }catch(err){ bad('تعذّر التصدير: '+DB.errText(err)); }
     finally{ btn.disabled=false; }
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b9';
+  var APP_BUILD='b10';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -726,7 +727,8 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       var isOpen=openSt[st.id]===undefined? i===0 : openSt[st.id];
       html+='<details class="st" data-sid="'+st.id+'"'+(isOpen?' open':'')+'><summary><span>'+esc(st.name||'محطة بلا اسم')+'</span><span class="muted">'+st.tanks.length+' خزانات · السعة <span class="num">'+fmt(total)+'</span> ليتر</span></summary><div class="body">'
         +'<div class="grid2"><div><label for="n_'+i+'">اسم المحطة</label><input type="text" id="n_'+i+'" data-i="'+i+'" data-k="name" value="'+esc(st.name)+'"></div>'
-        +'<div><label for="l_'+i+'">الموقع (المنطقة أو رابط الخريطة)</label><input type="text" id="l_'+i+'" data-i="'+i+'" data-k="loc" value="'+esc(st.loc||'')+'"></div></div>';
+        +'<div><label for="l_'+i+'">الموقع (المنطقة أو رابط الخريطة)</label><input type="text" id="l_'+i+'" data-i="'+i+'" data-k="loc" value="'+esc(st.loc||'')+'"></div>'
+        +'<div style="grid-column:1/-1"><label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" data-i="'+i+'" data-k="test"'+(st.test?' checked':'')+'> محطة تجريبية: تظهر للمدير فقط ولا تدخل في التقارير والإحصائيات والتنبيهات</label></div></div>';
       st.tanks.forEach(function(t,j){
         var lk=isLockedId(st.id,t.id);
         var fopts='<option value=""'+(t.fuel?'':' selected')+'>اختر النوع</option>'+d.fuels.map(function(f){ return '<option'+(f===t.fuel?' selected':'')+'>'+esc(f)+'</option>'; }).join('');
@@ -797,7 +799,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     DB.saveConfig(nc).then(function(){ return DB.loadAll(); }).then(function(){
       updateHeader(); if(!byId(currentStation)) currentStation=cfg.stations.length?cfg.stations[0].id:'';
       settingsDraft=clone(cfg);
-      settingsMsg='<div class="result">تم حفظ الإعدادات في قاعدة البيانات. الشاشات الأخرى تعمل الآن حسب '+cfg.stations.length+' محطات.</div>';
+      settingsMsg='<div class="result">تم حفظ الإعدادات في قاعدة البيانات. الشاشات الأخرى تعمل الآن حسب '+R().length+' محطات.</div>';
       renderSettings(main);
     }).catch(function(err){
       if(btn) btn.disabled=false;
@@ -899,7 +901,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     if(fv&&fv.mode==='edit'&&!getE(st.id,fv.date)) fv=stView.fv=null;
     if(fv&&fv.mode==='new'&&fv.date===td&&tp) fv=stView.fv=null;
     if(!fv&&!te&&!tp) fv={date:td,mode:'new'};
-    var opts=myStations().map(function(s){return '<option value="'+s.id+'"'+(s.id===st.id?' selected':'')+'>'+esc(s.name)+(getE(s.id,td)?' · أُرسلت':'')+'</option>';}).join('');
+    var opts=myStations().map(function(s){return '<option value="'+s.id+'"'+(s.id===st.id?' selected':'')+'>'+esc(s.name)+(s.test?' (تجريبية)':'')+(getE(s.id,td)?' · أُرسلت':'')+'</option>';}).join('');
     var chip, title;
     if(fv){
       title=(fv.mode==='edit'?'تصحيح يومية ':'يومية ')+esc(dlabel(fv.date));
@@ -1029,7 +1031,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   /* ---------- شاشة مسؤول التوزيع ---------- */
   function renderDist(root){
     var needs=[], fuels=allFuels();
-    cfg.stations.forEach(function(st){
+    R().forEach(function(st){
       fuelsOf(st).forEach(function(f){
         var s=fuelStock(st,f), started=!!s.last;
         var lowTank=tanksOf(st,f).some(function(t){ return (started||t.opening>0) && tankNow(st,t)/t.cap<t.alert/100; });
@@ -1050,7 +1052,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var td=today();
     html+='</section><section class="panel"><div class="panel-head"><h2>مخزون المحطات</h2><span class="muted">الأيام = المخزون ÷ متوسط مبيعات آخر 7 أيام</span></div><div class="tablewrap"><table><thead><tr><th>المحطة</th>'
       +fuels.map(function(f){return '<th>'+esc(f)+'</th>';}).join('')+'<th>اليومية</th></tr></thead><tbody>';
-    cfg.stations.forEach(function(st){
+    R().forEach(function(st){
       html+='<tr><td><strong>'+esc(st.name)+'</strong></td>';
       var mine=fuelsOf(st), e=getE(st.id,td);
       fuels.forEach(function(f){
@@ -1079,9 +1081,9 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     return out;
   }
   function renderMgr(root){
-    var td=today(), sent=cfg.stations.filter(function(s){return getE(s.id,td);}), alerts=getAlerts();
+    var td=today(), sent=R().filter(function(s){return getE(s.id,td);}), alerts=getAlerts();
     var urgent=alerts.filter(function(a){return a.sev!=='info';}).length, fuels=allFuels();
-    var html='<div class="stack"><div class="kpis"><div class="kpi"><div class="v"><span class="num">'+sent.length+'</span> <span style="font-size:15px;color:var(--muted)">من</span> <span class="num">'+cfg.stations.length+'</span></div><div class="l">محطات أرسلت اليومية</div></div>';
+    var html='<div class="stack"><div class="kpis"><div class="kpi"><div class="v"><span class="num">'+sent.length+'</span> <span style="font-size:15px;color:var(--muted)">من</span> <span class="num">'+R().length+'</span></div><div class="l">محطات أرسلت اليومية</div></div>';
     GROUPS.forEach(function(g){
       var tot=0; sent.forEach(function(s){ tot+=agg(s.id,td,td).g[g.k]; });
       html+='<div class="kpi"><div class="v num">'+fmt(tot)+'</div><div class="l">مبيعات '+g.t+' اليوم (ليتر)</div></div>';
@@ -1092,7 +1094,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     alerts.forEach(function(a){ html+=alertHTML(a); });
     html+='</section>';
     var corrs=[];
-    cfg.stations.forEach(function(st){
+    R().forEach(function(st){
       var a=dates(st.id), i=lb(a,addDays(td,-60));
       for(;i<a.length;i++){ var e=entries[st.id][a[i]]; if(e.versions&&e.versions.length) corrs.push({st:st,d:a[i],e:e,v:e.versions[e.versions.length-1]}); }
     });
@@ -1105,14 +1107,14 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
         +(ch.length?'<ul>'+ch.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul>':'')+'</div>';
     });
     var yd=addDays(td,-1), yr='';
-    cfg.stations.forEach(function(st){
+    R().forEach(function(st){
       var a=dates(st.id); if(!a.length||yd<a[0]) return;
       var ye=getE(st.id,yd);
       yr+='<div class="need"><div><div class="t">'+esc(st.name)+'</div><div class="muted">'+(ye?'أُرسلت '+esc(ye.time||'')+(ye.versions&&ye.versions.length?' · معدّلة':''):'ناقصة، لم تُدخل')+'</div></div><button type="button" class="btn ghost small" data-act="mgrYest" data-sid="'+st.id+'">'+(ye?'تعديل':'إضافة')+'</button></div>';
     });
     html+='</section><section class="panel"><div class="panel-head"><h2>تعديل يومية أمس</h2><span class="muted">'+esc(dlabel(yd))+' · للمدير فقط</span></div>'+(yr||'<div class="empty">لا توجد يوميات.</div>')+'</section><section class="panel"><div class="panel-head"><h2>ملخص اليوم</h2><span class="muted">المبيعات، وتحتها الفرق = الشيش − المتوقع</span></div><div class="tablewrap"><table><thead><tr><th>المحطة</th><th>الحالة</th>'
       +fuels.map(function(f){return '<th>'+esc(f)+'</th>';}).join('')+'<th></th></tr></thead><tbody>';
-    cfg.stations.forEach(function(st){
+    R().forEach(function(st){
       var e=getE(st.id,td);
       html+='<tr><td><strong>'+esc(st.name)+'</strong></td>';
       if(!e){ html+='<td><span class="chip info">بانتظار الإرسال</span></td><td colspan="'+(fuels.length+1)+'" class="muted">لا توجد بيانات</td></tr>'; return; }
@@ -1175,19 +1177,19 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var td=today(); if(!dash.anchor||dash.anchor>td) dash.anchor=td;
     var p=dash.period, r=periodRange(p,dash.anchor), ee=r.e<td?r.e:td, partial=ee<r.e;
     var k=diffDays(ee,r.s)+1, pr=prevRange(p,r), pe=addDays(pr.s,k-1); if(pe>pr.e) pe=pr.e;
-    var minD=null; cfg.stations.forEach(function(st){ var a=dates(st.id); if(a.length&&(minD===null||a[0]<minD)) minD=a[0]; });
+    var minD=null; R().forEach(function(st){ var a=dates(st.id); if(a.length&&(minD===null||a[0]<minD)) minD=a[0]; });
     var canPrev=minD!==null&&pr.e>=minD, nx=nextAnchor(p,r), canNext=periodRange(p,nx).s<=td;
     var cur={}, prv={}, withData=0;
-    cfg.stations.forEach(function(st){ var c=agg(st.id,r.s,ee); cur[st.id]=c; prv[st.id]=agg(st.id,pr.s,pe); if(c.n>0) withData++; });
+    R().forEach(function(st){ var c=agg(st.id,r.s,ee); cur[st.id]=c; prv[st.id]=agg(st.id,pr.s,pe); if(c.n>0) withData++; });
     var html='<div class="stack"><section class="panel"><div class="navrow"><div class="seg" role="group" aria-label="الفترة">'
       +['day','week','month','year'].map(function(x){ return '<button type="button" data-act="dperiod" data-p="'+x+'" aria-pressed="'+(x===p)+'">'+PNAME[x]+'</button>'; }).join('')+'</div>'
       +'<div class="btnrow" style="align-items:center"><button type="button" class="btn ghost small" data-act="dprev"'+(canPrev?'':' disabled')+' aria-label="الفترة السابقة">السابق ▸</button>'
       +'<span class="navlabel">'+esc(plabel(p,r))+'</span>'
       +'<button type="button" class="btn ghost small" data-act="dnext"'+(canNext?'':' disabled')+' aria-label="الفترة التالية">◂ التالي</button></div></div>'
-      +'<div class="muted" style="margin-top:10px">'+(partial?'الفترة لم تنتهِ بعد، والأرقام حتى '+esc(dshort(ee))+'. ':'')+'محطات لديها يوميات في هذه الفترة: <span class="num">'+withData+'</span> من <span class="num">'+cfg.stations.length+'</span>. المقارنة مع '+esc(plabel(p,pr))+((partial||pe<pr.e)?' للأيام نفسها':'')+'.</div></section>';
+      +'<div class="muted" style="margin-top:10px">'+(partial?'الفترة لم تنتهِ بعد، والأرقام حتى '+esc(dshort(ee))+'. ':'')+'محطات لديها يوميات في هذه الفترة: <span class="num">'+withData+'</span> من <span class="num">'+R().length+'</span>. المقارنة مع '+esc(plabel(p,pr))+((partial||pe<pr.e)?' للأيام نفسها':'')+'.</div></section>';
     html+='<div class="dgrid">';
     GROUPS.forEach(function(g){
-      var rows=cfg.stations.filter(function(st){return hasGroup(st,g.k);}).map(function(st){
+      var rows=R().filter(function(st){return hasGroup(st,g.k);}).map(function(st){
         var c=cur[st.id], pv=prv[st.id];
         return {st:st,v:c.g[g.k],pv:pv.g[g.k],has:c.n>0,pHas:pv.n>0,miss:c.miss};
       });
@@ -1241,7 +1243,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   /* ---------- التنقل والأحداث ---------- */
   var views={settings:renderSettings,station:renderStation,distribution:renderDist,manager:renderMgr,sales:renderSales,rules:renderRules};
   var main=document.getElementById('main');
-  function updateHeader(){ document.getElementById('count').textContent=cfg.stations.length+' محطة'; }
+  function updateHeader(){ document.getElementById('count').textContent=R().length+' محطة'; }
   function go(name){
     if(!views[name]||ALLOWED.indexOf(name)<0) name=ALLOWED[0]||'station';
     if(name!=='settings'){ settingsDraft=null; settingsMsg=''; confirmKey=null; }
@@ -1256,7 +1258,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     if(el.getAttribute('data-g')){ d[el.getAttribute('data-g')]=el.value; return; }
     var i=el.getAttribute('data-i'), k=el.getAttribute('data-k'); if(i===null||!k) return;
     var st=d.stations[+i], j=el.getAttribute('data-j');
-    if(j===null) st[k]=el.value; else st.tanks[+j][k]=el.value;
+    if(j===null) st[k]=(el.type==='checkbox'?el.checked:el.value); else st.tanks[+j][k]=el.value;
   });
   main.addEventListener('change',function(ev){
     var el=ev.target; if(el.getAttribute&&el.getAttribute('data-exp')){ expOnChange(el); return; }
