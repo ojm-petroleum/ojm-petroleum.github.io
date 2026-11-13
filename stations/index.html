@@ -220,7 +220,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   function ub(a,x){ var lo=0,hi=a.length; while(lo<hi){ var m=(lo+hi)>>1; if(a[m]<=x) lo=m+1; else hi=m; } return lo; }
 
   /* ---------- الاستعلامات من الإعدادات ---------- */
-  function R(){ return cfg.stations.filter(function(s){return !s.test;}); }
+  function R(){ return ROLE==='manager'?cfg.stations:cfg.stations.filter(function(s){return !s.test;}); }
   function byId(id){ return cfg.stations.filter(function(s){return s.id===id;})[0]; }
   function fuelsOf(st){ var o=[]; st.tanks.forEach(function(t){ if(o.indexOf(t.fuel)<0) o.push(t.fuel); }); return o; }
   function allFuels(){ var o=[]; R().forEach(function(s){ fuelsOf(s).forEach(function(f){ if(o.indexOf(f)<0) o.push(f); }); }); return o; }
@@ -693,7 +693,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b10';
+  var APP_BUILD='b11';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -728,7 +728,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       html+='<details class="st" data-sid="'+st.id+'"'+(isOpen?' open':'')+'><summary><span>'+esc(st.name||'محطة بلا اسم')+'</span><span class="muted">'+st.tanks.length+' خزانات · السعة <span class="num">'+fmt(total)+'</span> ليتر</span></summary><div class="body">'
         +'<div class="grid2"><div><label for="n_'+i+'">اسم المحطة</label><input type="text" id="n_'+i+'" data-i="'+i+'" data-k="name" value="'+esc(st.name)+'"></div>'
         +'<div><label for="l_'+i+'">الموقع (المنطقة أو رابط الخريطة)</label><input type="text" id="l_'+i+'" data-i="'+i+'" data-k="loc" value="'+esc(st.loc||'')+'"></div>'
-        +'<div style="grid-column:1/-1"><label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" data-i="'+i+'" data-k="test"'+(st.test?' checked':'')+'> محطة تجريبية: تظهر للمدير فقط ولا تدخل في التقارير والإحصائيات والتنبيهات</label></div></div>';
+        +'<div style="grid-column:1/-1"><label style="display:flex;gap:6px;align-items:center;font-weight:400"><input type="checkbox" data-i="'+i+'" data-k="test"'+(st.test?' checked':'')+'> محطة تجريبية: تظهر للمدير فقط (مع كل تقاريره)، ولا يراها مسؤول التوزيع ولا مديرو المحطات</label></div></div>';
       st.tanks.forEach(function(t,j){
         var lk=isLockedId(st.id,t.id);
         var fopts='<option value=""'+(t.fuel?'':' selected')+'>اختر النوع</option>'+d.fuels.map(function(f){ return '<option'+(f===t.fuel?' selected':'')+'>'+esc(f)+'</option>'; }).join('');
