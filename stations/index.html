@@ -72,6 +72,24 @@ input.invalid{border-color:var(--crit)}
 .fuelblock{border-top:1px solid var(--line);padding-top:16px;margin-top:16px}
 .fuelblock:first-of-type{border-top:0;padding-top:0;margin-top:0}
 .tankrow{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:12px}
+#f .fuelblock{border:2px solid var(--accent);border-radius:12px;padding:0 0 14px;margin-top:18px;overflow:hidden;background:var(--surface)}
+#f .fuelblock:first-of-type{border-top:2px solid var(--accent);padding-top:0;margin-top:18px}
+#f .fuelblock>h3{background:var(--accent);color:var(--accent-ink);padding:10px 14px;font-size:18px;margin:0 0 12px}
+#f .fuelblock>*:not(h3){margin-inline:12px}
+#f .tankrow{border:1px dashed var(--line);border-radius:10px;padding:10px 10px 12px;margin-top:14px;background:var(--bg)}
+#f .tankhead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;font-weight:700;font-size:16px;margin-bottom:2px}
+#f .fld{border:1px solid var(--line);border-inline-start:7px solid var(--info);border-radius:10px;padding:10px 12px;background:var(--surface);margin-top:10px}
+#f .fld.sales{border-inline-start-color:var(--s1)}#f .fld.recv{border-inline-start-color:var(--s2)}#f .fld.dip{border-inline-start-color:var(--s3)}
+#f label{font-size:15.5px;font-weight:700;margin-bottom:6px}
+#f input.num-in{font-size:22px;min-height:54px;font-weight:600;border:2px solid var(--line);background:var(--bg)}
+#f input.num-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft);outline:none}
+#f input.num-in.filled{border-color:var(--ok)}
+#f input.num-in.invalid{border-color:var(--crit)}
+.reqtag,.opttag{display:inline-block;border-radius:999px;padding:0 8px;font-size:11.5px;font-weight:600;margin-inline-start:6px;vertical-align:middle}
+.reqtag{background:var(--crit-bg);color:var(--crit)}.opttag{background:var(--info-bg);color:var(--info)}
+#sendbar{position:sticky;bottom:0;z-index:5;background:var(--surface);border-top:2px solid var(--accent);padding:10px 12px;margin:20px -16px -16px;border-radius:0 0 12px 12px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between}
+#remain{font-weight:600;font-size:14px}#remain.done{color:var(--ok)}#remain button{font:inherit;font-weight:600;color:var(--accent);background:transparent;border:0;text-decoration:underline;cursor:pointer;padding:0 4px}
+
 .bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
 .bar>i{display:block;height:100%;border-radius:4px;background:var(--ok);width:0;transition:width .25s}
 .bar>i.warn{background:var(--warn)}
@@ -614,7 +632,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var rc=Object.keys(s.recv||{}).filter(function(k){ return s.recv[k]!=null; }).map(function(k){ return (tl[k]||k)+' '+s.recv[k]; });
     var dp=Object.keys(s.dip||{}).filter(function(id){ return s.dip[id]!=null; }).map(function(id){ return (tl[id]||'خزان محذوف')+' '+s.dip[id]; });
     if(sa.length) parts.push('المبيعات: '+sa.join('، '));
-    if(rc.length) parts.push('المستلم: '+rc.join('، '));
+    if(rc.length) parts.push('المشتريات: '+rc.join('، '));
     if(dp.length) parts.push('الشيش: '+dp.join('، '));
     return parts.join(' | ');
   }
@@ -637,9 +655,9 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       var inR=function(d){ return (!from||d>=from)&&(!to||d<=to); };
       var H={
         sales:['المحطة','التاريخ','الوقود','المبيعات (ليتر)'],
-        recv:['المحطة','التاريخ','الخزان والوقود','المشتريات المستلمة (ليتر)'],
+        recv:['المحطة','التاريخ','الخزان والوقود','المشتريات (ليتر)'],
         dip:['المحطة','التاريخ','الخزان','الوقود','الكمية السابقة (ليتر)','قراءة الشيش (ليتر)','التغير (ليتر)'],
-        vr:['المحطة','التاريخ','الوقود','الكمية السابقة (ليتر)','المستلم (ليتر)','المبيعات (ليتر)','المتوقع (ليتر)','مجموع الشيش (ليتر)','الفرق (ليتر)','الحالة'],
+        vr:['المحطة','التاريخ','الوقود','الكمية السابقة (ليتر)','المشتريات (ليتر)','المبيعات (ليتر)','المتوقع (ليتر)','مجموع الشيش (ليتر)','الفرق (ليتر)','الحالة'],
         tk:['المحطة','الموقع','الخزان','الوقود','السعة (ليتر)','الرصيد الافتتاحي (ليتر)','نسبة التنبيه %','الكمية الحالية (ليتر)','نسبة الامتلاء %','مقفل بعد أول يومية'],
         lg:['المحطة','تاريخ اليومية','تاريخ التعديل','وقت التعديل','السبب','النسخة القديمة']
       };
@@ -697,7 +715,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b12';
+  var APP_BUILD='b13';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -824,14 +842,14 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     return tanksOf(st,f).filter(function(t){return e.dip[t.id]!=null;}).map(function(t){
       var q=e.dip[t.id], p=q/t.cap;
       return '<div class="tankrow"><div style="display:flex;justify-content:space-between;gap:8px"><span>'+esc(tankLabel(st,t))+'</span><span><span class="num">'+fmt(q)+'</span> من <span class="num">'+fmt(t.cap)+'</span></span></div><div class="bar" aria-hidden="true"><i class="'+barCls(p,t)+'" style="width:'+Math.min(p*100,100)+'%"></i></div>'
-        +(d?'<div class="hint">السابق <span class="num">'+fmt(prevOf(st,t,d))+'</span> · الوارد <span class="num">'+fmt(recvT(e,t))+'</span> · المسحوب منه <span class="num">'+fmt(prevOf(st,t,d)+recvT(e,t)-q)+'</span></div>':'')+'</div>';
+        +(d?'<div class="hint">السابق <span class="num">'+fmt(prevOf(st,t,d))+'</span> · المشتريات <span class="num">'+fmt(recvT(e,t))+'</span> · المسحوب منه <span class="num">'+fmt(prevOf(st,t,d)+recvT(e,t)-q)+'</span></div>':'')+'</div>';
     }).join('');
   }
   function summaryHTML(st,d,e,ro){
     var html='<div style="margin-top:12px">';
     fuelsOf(st).forEach(function(f){
       var v=fuelVar(st,f,d,e); if(!v.has) return;
-      html+='<div class="fuelblock"><h3>'+esc(f)+'</h3><div class="calc">'+cellKV('مبيعات اليوم',fmt(v.sales))+cellKV('الوارد',fmt(v.recv))+cellKV('المتوقع',fmt(v.exp))+cellKV('الشيش',fmt(v.act))+cellKV('الفرق',v.gap?'—':sgn(v.diff))
+      html+='<div class="fuelblock"><h3>'+esc(f)+'</h3><div class="calc">'+cellKV('مبيعات اليوم',fmt(v.sales))+cellKV('المشتريات',fmt(v.recv))+cellKV('المتوقع',fmt(v.exp))+cellKV('الشيش',fmt(v.act))+cellKV('الفرق',v.gap?'—':sgn(v.diff))
         +'<div><div class="k">الحالة</div>'+varChip(v)+'</div></div>'+tankLines(st,f,e,d)+'</div>';
     });
     if(!ro&&e.versions&&e.versions.length){ var lv=e.versions[e.versions.length-1]; html+='<div class="hint" style="margin-top:12px">آخر تصحيح: '+esc(dshort(lv.on))+' '+esc(lv.at)+' · السبب: '+esc(lv.reason)+'</div>'; }
@@ -863,24 +881,27 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       +(edit?'<div class="banner" style="margin-top:12px">أنت تصحح اليومية نفسها وليس إضافة قيد في يوم آخر. تُحفظ النسخة القديمة مع السبب ويراها المدير.</div>':'')
       +'<form id="f" novalidate>'
       +(ROLE==='station'?'<div style="margin-top:12px"><label for="fdate">تاريخ اليومية</label><input type="date" id="fdate" value="'+d+'" min="'+minEntryDay(st.id)+'" max="'+today()+'"><div class="hint">يمكنك إدخال اليوم أو يوم سابق لم يُسجَّل، ولا يمكن الرجوع إلى تاريخ قبل آخر يومية مسجلة'+(lastDay(st.id)?' ('+esc(dshort(lastDay(st.id)))+')':'')+'. ولا يُفتح بعدها إلا تعديل تلك اليومية أو تاريخ أحدث.</div><div class="err" id="err_fdate" hidden></div></div>':'');
+    var REQ='<span class="reqtag">مطلوب</span>', OPT='<span class="opttag">اختياري</span>';
+    function fld(kind,id,label,tag,value,ph,extra){
+      return '<div class="fld '+kind+'"><label for="'+id+'">'+label+' '+tag+'</label>'
+        +'<input type="text" inputmode="numeric" autocomplete="off" class="num-in" id="'+id+'" value="'+value+'"'+(ph?' placeholder="'+ph+'"':'')+'>'
+        +(extra||'')+'<div class="err" id="err_'+id+'" hidden></div></div>';
+    }
     fuels.forEach(function(f,i){
-      html+='<div class="fuelblock"><h3>'+esc(f)+'</h3><div class="grid2" style="margin-top:12px">'
-        +'<div><label for="sales_'+i+'">مبيعات اليوم (ليتر)</label><input type="text" inputmode="numeric" autocomplete="off" class="num-in" id="sales_'+i+'" value="'+val('sales',f)+'"><div class="err" id="err_sales_'+i+'" hidden></div></div>'
-        +'</div>'+((edit&&e&&e.recv&&e.recv[f])?'<div class="hint">وارد قديم مسجّل للصنف كله: <span class="num">'+fmt(e.recv[f])+'</span> ليتر (قبل التسجيل لكل خزان)، وسيبقى كما هو.</div>':'');
+      html+='<div class="fuelblock"><h3>'+esc(f)+'</h3>'
+        +fld('sales','sales_'+i,'مبيعات اليوم من '+esc(f)+' (ليتر)',REQ,val('sales',f),'')
+        +((edit&&e&&e.recv&&e.recv[f])?'<div class="hint">مشتريات قديمة مسجّلة للصنف كله: <span class="num">'+fmt(e.recv[f])+'</span> ليتر (قبل التسجيل لكل خزان)، وستبقى كما هي.</div>':'');
       tanksOf(st,f).forEach(function(t){
         var pi=prevInfo(st,t,d);
-        html+='<div class="tankrow"><label for="rcv_'+t.id+'">وارد اليوم من التوصيل إلى: '+esc(tankLabel(st,t))+' (ليتر)</label>'
-          +'<input type="text" inputmode="numeric" autocomplete="off" class="num-in" id="rcv_'+t.id+'" value="'+val('recv',t.id)+'" placeholder="0"><div class="err" id="err_rcv_'+t.id+'" hidden></div>'
-          +'<label for="dip_'+t.id+'" style="margin-top:8px">قراءة الشيش: '+esc(tankLabel(st,t))+' (ليتر)</label>'
-          +'<input type="text" inputmode="numeric" autocomplete="off" class="num-in" id="dip_'+t.id+'" value="'+val('dip',t.id)+'">'
-          +'<div class="bar" aria-hidden="true"><i id="bar_'+t.id+'"></i></div>'
-          +'<div class="hint">السعة <span class="num">'+fmt(t.cap)+'</span> · '+(pi.first?'الكمية الافتتاحية (تُستخدم مرة واحدة)':'الكمية السابقة')+' <span class="num">'+fmt(pi.v)+'</span> · تنبيه عند أقل من <span class="num">'+t.alert+'%</span></div>'
-          +'<div class="err" id="err_dip_'+t.id+'" hidden></div></div>';
+        html+='<div class="tankrow"><div class="tankhead"><span>'+esc(tankLabel(st,t))+'</span><span class="muted">السعة <span class="num">'+fmt(t.cap)+'</span> · '+(pi.first?'الكمية الافتتاحية':'الكمية السابقة')+' <span class="num">'+fmt(pi.v)+'</span> · تنبيه عند أقل من <span class="num">'+t.alert+'%</span></span></div>'
+          +fld('recv','rcv_'+t.id,'مشتريات اليوم إلى هذا الخزان (ليتر)',OPT,val('recv',t.id),'0','<div class="hint">اتركه فارغاً إذا لم يصل توصيل اليوم</div>')
+          +fld('dip','dip_'+t.id,'قراءة الشيش لهذا الخزان (ليتر)',REQ,val('dip',t.id),'','<div class="bar" aria-hidden="true"><i id="bar_'+t.id+'"></i></div>')
+          +'</div>';
       });
       html+='<div class="calc" id="calc_'+i+'"></div></div>';
     });
     if(edit) html+='<div style="margin-top:16px"><label for="reason">سبب التصحيح</label><input type="text" id="reason" placeholder="مثال: قراءة الخزان كُتبت بالخطأ"><div class="err" id="err_reason" hidden></div></div>';
-    html+='<div style="margin-top:20px" class="btnrow"><button class="btn" type="submit">'+(edit?'حفظ التصحيح':'إرسال اليومية')+'</button>'+((edit||fv.date!==today())?'<button type="button" class="btn ghost" data-act="cancelForm">إلغاء</button>':'')+'</div><div id="result"></div></form>';
+    html+='<div id="result"></div><div id="sendbar"><div id="remain" class="muted" aria-live="polite"></div><div class="btnrow"><button class="btn" type="submit">'+(edit?'حفظ التصحيح':'إرسال اليومية')+'</button>'+((edit||fv.date!==today())?'<button type="button" class="btn ghost" data-act="cancelForm">إلغاء</button>':'')+'</div></div></form>';
     return html;
   }
   function historyHTML(st){
@@ -941,6 +962,14 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     function ok(x){ return x!==null && !isNaN(x); }
     function live(){
       var r=read();
+      var req=[], first=null;
+      root.querySelectorAll('#f input.num-in').forEach(function(inp){
+        var has=inp.value.trim()!=='';
+        inp.classList.toggle('filled',has);
+        if(!has&&!/^rcv_/.test(inp.id)){ req.push(inp); if(!first) first=inp; }
+      });
+      var rm=document.getElementById('remain');
+      if(rm){ if(req.length){ rm.className='muted'; rm.innerHTML='المتبقي '+req.length+' حقل مطلوب <button type="button" id="gomissing">اذهب للحقل التالي</button>'; var gm=document.getElementById('gomissing'); gm.onclick=function(){ first.scrollIntoView({block:'center',behavior:'smooth'}); first.focus(); }; } else { rm.className='done'; rm.textContent='كل الحقول المطلوبة معبّأة، يمكنك الإرسال'; } }
       fuels.forEach(function(f,i){
         var ts=tanksOf(st,f), prev=0, act=0, rsum=(edit&&getE(st.id,d)&&getE(st.id,d).recv&&getE(st.id,d).recv[f])||0, complete=true;
         ts.forEach(function(t){
@@ -1088,7 +1117,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     var v=e.versions[e.versions.length-1], s=v.snap, out=[];
     ['sales','recv'].forEach(function(kind){
       var names=Object.keys(Object.assign({},s[kind]||{},e[kind]||{}));
-      names.forEach(function(f){ var o=(s[kind]||{})[f]||0, n=(e[kind]||{})[f]||0, tk=st.tanks.filter(function(x){return x.id===f;})[0], nm=tk?tankLabel(st,tk):f; if(o!==n) out.push((kind==='sales'?'مبيعات ':'وارد ')+esc(nm)+': <span class="num">'+fmt(o)+'</span> ← <span class="num">'+fmt(n)+'</span>'); });
+      names.forEach(function(f){ var o=(s[kind]||{})[f]||0, n=(e[kind]||{})[f]||0, tk=st.tanks.filter(function(x){return x.id===f;})[0], nm=tk?tankLabel(st,tk):f; if(o!==n) out.push((kind==='sales'?'مبيعات ':'مشتريات ')+esc(nm)+': <span class="num">'+fmt(o)+'</span> ← <span class="num">'+fmt(n)+'</span>'); });
     });
     Object.keys(Object.assign({},s.dip||{},e.dip||{})).forEach(function(id){
       var t=st.tanks.filter(function(x){return x.id===id;})[0], o=(s.dip||{})[id], n=(e.dip||{})[id];
@@ -1251,7 +1280,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     rules.forEach(function(x){ html+='<tr><td>'+x[0]+'</td><td>'+x[1]+'</td><td>'+x[2]+'</td></tr>'; });
     html+='</tbody></table></div></section>'
       +'<section class="panel"><h2 style="margin-bottom:10px">المتوقع والشيش</h2>'
-      +'<p>المتوقع = الكمية السابقة + الوارد − المبيعات. في أول يوم تكون الكمية السابقة هي الافتتاحية، وبعده تكون قراءة اليوم السابق. الشيش = مجموع قراءات الشيش اليوم. لا تُخزَّن الكمية السابقة بل تُحسب من سجل الأيام، ولذلك يعيد تصحيح يومية خاطئة حساب اليوم التالي تلقائياً.</p>'
+      +'<p>المتوقع = الكمية السابقة + المشتريات − المبيعات. في أول يوم تكون الكمية السابقة هي الافتتاحية، وبعده تكون قراءة اليوم السابق. الشيش = مجموع قراءات الشيش اليوم. لا تُخزَّن الكمية السابقة بل تُحسب من سجل الأيام، ولذلك يعيد تصحيح يومية خاطئة حساب اليوم التالي تلقائياً.</p>'
       +'<div class="flow" style="margin-top:12px"><span class="chip info">الإعدادات</span><span class="arrow">←</span><span class="chip info">مدير المحطة يعبّئ النموذج</span><span class="arrow">←</span><span class="chip info">التحقق من الأرقام</span><span class="arrow">←</span><span class="chip info">قواعد التنبيه</span><span class="arrow">←</span><span class="chip info">مسؤول التوزيع والمدير</span></div></section></div>';
     root.innerHTML=html;
   }
