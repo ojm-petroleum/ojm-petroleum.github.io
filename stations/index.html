@@ -715,7 +715,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b14';
+  var APP_BUILD='b15';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -901,7 +901,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       html+='<div class="calc" id="calc_'+i+'"></div></div>';
     });
     if(edit) html+='<div style="margin-top:16px"><label for="reason">سبب التصحيح</label><input type="text" id="reason" placeholder="مثال: قراءة الخزان كُتبت بالخطأ"><div class="err" id="err_reason" hidden></div></div>';
-    html+='<div id="result"></div><div id="sendbar"><div id="remain" class="muted" aria-live="polite"></div><div class="btnrow"><button class="btn" type="submit">'+(edit?'حفظ التصحيح':'إرسال اليومية')+'</button>'+((edit||fv.date!==today())?'<button type="button" class="btn ghost" data-act="cancelForm">إلغاء</button>':'')+'</div></div></form>';
+    html+='<div id="result"></div><div style="margin-top:20px"><div class="btnrow"><button class="btn" type="submit">'+(edit?'حفظ التصحيح':'إرسال اليومية')+'</button>'+((edit||fv.date!==today())?'<button type="button" class="btn ghost" data-act="cancelForm">إلغاء</button>':'')+'</div></div></form>';
     return html;
   }
   function historyHTML(st){
@@ -962,14 +962,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     function ok(x){ return x!==null && !isNaN(x); }
     function live(){
       var r=read();
-      var req=[], first=null;
-      root.querySelectorAll('#f input.num-in').forEach(function(inp){
-        var has=inp.value.trim()!=='';
-        inp.classList.toggle('filled',has);
-        if(!has&&!/^rcv_/.test(inp.id)){ req.push(inp); if(!first) first=inp; }
-      });
-      var rm=document.getElementById('remain');
-      if(rm){ if(req.length){ rm.className='muted'; rm.innerHTML='المتبقي '+req.length+' حقل مطلوب'; } else { rm.className='done'; rm.textContent='كل الحقول المطلوبة معبّأة، يمكنك الإرسال'; } }
+      root.querySelectorAll('#f input.num-in').forEach(function(inp){ inp.classList.toggle('filled',inp.value.trim()!==''); });
       fuels.forEach(function(f,i){
         var ts=tanksOf(st,f), prev=0, act=0, rsum=(edit&&getE(st.id,d)&&getE(st.id,d).recv&&getE(st.id,d).recv[f])||0, complete=true;
         ts.forEach(function(t){
