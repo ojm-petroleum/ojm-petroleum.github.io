@@ -715,7 +715,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b13';
+  var APP_BUILD='b14';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -969,7 +969,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
         if(!has&&!/^rcv_/.test(inp.id)){ req.push(inp); if(!first) first=inp; }
       });
       var rm=document.getElementById('remain');
-      if(rm){ if(req.length){ rm.className='muted'; rm.innerHTML='المتبقي '+req.length+' حقل مطلوب <button type="button" id="gomissing">اذهب للحقل التالي</button>'; var gm=document.getElementById('gomissing'); gm.onclick=function(){ first.scrollIntoView({block:'center',behavior:'smooth'}); first.focus(); }; } else { rm.className='done'; rm.textContent='كل الحقول المطلوبة معبّأة، يمكنك الإرسال'; } }
+      if(rm){ if(req.length){ rm.className='muted'; rm.innerHTML='المتبقي '+req.length+' حقل مطلوب'; } else { rm.className='done'; rm.textContent='كل الحقول المطلوبة معبّأة، يمكنك الإرسال'; } }
       fuels.forEach(function(f,i){
         var ts=tanksOf(st,f), prev=0, act=0, rsum=(edit&&getE(st.id,d)&&getE(st.id,d).recv&&getE(st.id,d).recv[f])||0, complete=true;
         ts.forEach(function(t){
