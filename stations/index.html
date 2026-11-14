@@ -656,7 +656,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       var inR=function(d){ return (!from||d>=from)&&(!to||d<=to); };
       var H={
         sales:['المحطة','التاريخ','الوقود','المبيعات (ليتر)'],
-        recv:['المحطة','التاريخ','الخزان والوقود','المشتريات (ليتر)'],
+        recv:['المحطة','التاريخ','الوقود أو الخزان','المشتريات (ليتر)'],
         dip:['المحطة','التاريخ','الخزان','الوقود','الكمية السابقة (ليتر)','قراءة الشيش (ليتر)','التغير (ليتر)'],
         vr:['المحطة','التاريخ','الوقود','الكمية السابقة (ليتر)','المشتريات (ليتر)','المبيعات (ليتر)','المتوقع (ليتر)','مجموع الشيش (ليتر)','الفرق (ليتر)','الحالة'],
         tk:['المحطة','الموقع','الخزان','الوقود','السعة (ليتر)','الرصيد الافتتاحي (ليتر)','نسبة التنبيه %','الكمية الحالية (ليتر)','نسبة الامتلاء %','مقفل بعد أول يومية'],
@@ -716,7 +716,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b16';
+  var APP_BUILD='b17';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -843,7 +843,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
     return tanksOf(st,f).filter(function(t){return e.dip[t.id]!=null;}).map(function(t){
       var q=e.dip[t.id], p=q/t.cap;
       return '<div class="tankrow"><div style="display:flex;justify-content:space-between;gap:8px"><span>'+esc(tankLabel(st,t))+'</span><span><span class="num">'+fmt(q)+'</span> من <span class="num">'+fmt(t.cap)+'</span></span></div><div class="bar" aria-hidden="true"><i class="'+barCls(p,t)+'" style="width:'+Math.min(p*100,100)+'%"></i></div>'
-        +(d?'<div class="hint">السابق <span class="num">'+fmt(prevOf(st,t,d))+'</span> · المشتريات <span class="num">'+fmt(recvT(e,t))+'</span> · المسحوب منه <span class="num">'+fmt(prevOf(st,t,d)+recvT(e,t)-q)+'</span></div>':'')+'</div>';
+        +'</div>';
     }).join('');
   }
   function summaryHTML(st,d,e,ro){
@@ -889,13 +889,14 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
         +(extra||'')+'<div class="err" id="err_'+id+'" hidden></div></div>';
     }
     fuels.forEach(function(f,i){
+      var legT=0; if(edit&&e&&e.recv) tanksOf(st,f).forEach(function(t){ legT+=(e.recv[t.id]||0); });
       html+='<div class="fuelblock"><h3>'+esc(f)+'</h3>'
         +fld('sales','sales_'+i,'مبيعات اليوم من '+esc(f)+' (ليتر)',REQ,val('sales',f),'')
-        +((edit&&e&&e.recv&&e.recv[f])?'<div class="hint">مشتريات قديمة مسجّلة للصنف كله: <span class="num">'+fmt(e.recv[f])+'</span> ليتر (قبل التسجيل لكل خزان)، وستبقى كما هي.</div>':'');
+        +fld('recv','recv_'+i,'مشتريات اليوم من '+esc(f)+' (ليتر)',OPT,val('recv',f),'0','<div class="hint">اتركه فارغاً إذا لم يصل توصيل اليوم</div>')
+        +(legT?'<div class="hint">مشتريات مسجّلة سابقاً على الخزانات: <span class="num">'+fmt(legT)+'</span> ليتر، وستبقى كما هي وتُحسب مع الباقي.</div>':'');
       tanksOf(st,f).forEach(function(t){
         var pi=prevInfo(st,t,d);
         html+='<div class="tankrow"><div class="tankhead"><span>'+esc(tankLabel(st,t))+'</span><span class="muted">السعة <span class="num">'+fmt(t.cap)+'</span> · '+(pi.first?'الكمية الافتتاحية':'الكمية السابقة')+' <span class="num">'+fmt(pi.v)+'</span> · تنبيه عند أقل من <span class="num">'+t.alert+'%</span></span></div>'
-          +fld('recv','rcv_'+t.id,'مشتريات اليوم إلى هذا الخزان (ليتر)',OPT,val('recv',t.id),'0','<div class="hint">اتركه فارغاً إذا لم يصل توصيل اليوم</div>')
           +fld('dip','dip_'+t.id,'قراءة الشيش لهذا الخزان (ليتر)',REQ,val('dip',t.id),'','<div class="bar" aria-hidden="true"><i id="bar_'+t.id+'"></i></div>')
           +'</div>';
       });
@@ -956,7 +957,8 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       var r={sales:{},recv:{},dip:{}};
       fuels.forEach(function(f,i){
         r.sales[f]=num(document.getElementById('sales_'+i).value);
-        tanksOf(st,f).forEach(function(t){ r.recv[t.id]=num(document.getElementById('rcv_'+t.id).value); r.dip[t.id]=num(document.getElementById('dip_'+t.id).value); });
+        r.recv[f]=num(document.getElementById('recv_'+i).value);
+        tanksOf(st,f).forEach(function(t){ r.dip[t.id]=num(document.getElementById('dip_'+t.id).value); });
       });
       return r;
     }
@@ -965,9 +967,9 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       var r=read();
       root.querySelectorAll('#f input.num-in').forEach(function(inp){ inp.classList.toggle('filled',inp.value.trim()!==''); });
       fuels.forEach(function(f,i){
-        var ts=tanksOf(st,f), prev=0, act=0, rsum=(edit&&getE(st.id,d)&&getE(st.id,d).recv&&getE(st.id,d).recv[f])||0, complete=true;
+        var ts=tanksOf(st,f), prev=0, act=0, rsum=ok(r.recv[f])?r.recv[f]:0, complete=true;
         ts.forEach(function(t){
-          prev+=prevOf(st,t,d); if(ok(r.recv[t.id])) rsum+=r.recv[t.id];
+          prev+=prevOf(st,t,d); if(edit&&getE(st.id,d)&&getE(st.id,d).recv) rsum+=(getE(st.id,d).recv[t.id]||0);
           var v=r.dip[t.id], bar=document.getElementById('bar_'+t.id);
           if(ok(v)){ act+=v; var p=Math.min(v/t.cap,1); bar.style.width=(p*100)+'%'; bar.className=barCls(p,t); } else { complete=false; bar.style.width='0'; }
         });
@@ -985,7 +987,8 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       var raw={sales:{},recv:{},dip:{}};
       fuels.forEach(function(f,i){
         raw.sales[f]=document.getElementById('sales_'+i).value;
-        tanksOf(st,f).forEach(function(t){ raw.recv[t.id]=document.getElementById('rcv_'+t.id).value; raw.dip[t.id]=document.getElementById('dip_'+t.id).value; });
+        raw.recv[f]=document.getElementById('recv_'+i).value;
+        tanksOf(st,f).forEach(function(t){ raw.dip[t.id]=document.getElementById('dip_'+t.id).value; });
       });
       putDraft(st.id,d,raw);
     }
@@ -993,7 +996,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       var el=document.getElementById('err_'+id), inp=document.getElementById(id);
       if(msg){ el.textContent=msg; el.hidden=false; if(inp) inp.classList.add('invalid'); } else { el.hidden=true; if(inp) inp.classList.remove('invalid'); }
     }
-    root.querySelectorAll('#f input[id^=rcv_],#f input[id^=sales_],#f input[id^=dip_]').forEach(function(inp){ inp.addEventListener('input',function(){ live(); saveDraft(); }); });
+    root.querySelectorAll('#f input[id^=recv_],#f input[id^=sales_],#f input[id^=dip_]').forEach(function(inp){ inp.addEventListener('input',function(){ live(); saveDraft(); }); });
     var fdate=document.getElementById('fdate');
     if(fdate) fdate.addEventListener('change',function(){
       var v=fdate.value, mn=minEntryDay(st.id), mx=today(), m=null;
@@ -1013,8 +1016,8 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
         var s=r.sales[f], m=null;
         if(s===null) m='مطلوب'; else if(isNaN(s)) m=msgNum;
         err('sales_'+i,m); if(m) bad=true;
+        var rv=r.recv[f]; m=(rv!==null&&isNaN(rv))?msgNum:null; err('recv_'+i,m); if(m) bad=true;
         tanksOf(st,f).forEach(function(t){
-          var rv=r.recv[t.id]; m=(rv!==null&&isNaN(rv))?msgNum:null; err('rcv_'+t.id,m); if(m) bad=true;
           var v=r.dip[t.id]; m=null;
           if(v===null) m='مطلوب'; else if(isNaN(v)) m=msgNum; else if(v>t.cap) m='أكبر من سعة الخزان ('+fmt(t.cap)+')';
           err('dip_'+t.id,m); if(m) bad=true;
@@ -1025,7 +1028,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
       if(bad){ res.innerHTML='<div class="result bad">راجع الحقول المعلَّمة ثم أعد المحاولة.</div>'; return; }
       var e0=getE(st.id,d), isEd=!!(edit&&e0);
       var ne={sales:{},recv:{},dip:{}};
-      fuels.forEach(function(f){ ne.sales[f]=r.sales[f]; if(isEd&&e0.recv&&e0.recv[f]) ne.recv[f]=e0.recv[f]; tanksOf(st,f).forEach(function(t){ if(r.recv[t.id]) ne.recv[t.id]=r.recv[t.id]; ne.dip[t.id]=r.dip[t.id]; }); });
+      fuels.forEach(function(f){ ne.sales[f]=r.sales[f]; if(r.recv[f]) ne.recv[f]=r.recv[f]; tanksOf(st,f).forEach(function(t){ if(isEd&&e0.recv&&e0.recv[t.id]) ne.recv[t.id]=e0.recv[t.id]; ne.dip[t.id]=r.dip[t.id]; }); });
       if(isEd){
         var chg=canon(e0.recv||{})!==canon(ne.recv); fuels.forEach(function(f){ if((e0.sales[f]||0)!==ne.sales[f]) chg=true; tanksOf(st,f).forEach(function(t){ if(e0.dip[t.id]!==ne.dip[t.id]) chg=true; }); });
         if(!chg){ res.innerHTML='<div class="result bad">لم تغيّر أي قيمة. عدّل الرقم الخاطئ ثم احفظ.</div>'; return; }
