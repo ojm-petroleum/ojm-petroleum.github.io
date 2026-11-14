@@ -72,6 +72,7 @@ input.invalid{border-color:var(--crit)}
 .fuelblock{border-top:1px solid var(--line);padding-top:16px;margin-top:16px}
 .fuelblock:first-of-type{border-top:0;padding-top:0;margin-top:0}
 .tankrow{display:grid;grid-template-columns:minmax(0,1fr);gap:4px;margin-top:12px}
+#f .calc:empty{display:none}
 #f .fuelblock{border:2px solid var(--accent);border-radius:12px;padding:0 0 14px;margin-top:18px;overflow:hidden;background:var(--surface)}
 #f .fuelblock:first-of-type{border-top:2px solid var(--accent);padding-top:0;margin-top:18px}
 #f .fuelblock>h3{background:var(--accent);color:var(--accent-ink);padding:10px 14px;font-size:18px;margin:0 0 12px}
@@ -715,7 +716,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
   }
 
   /* ---------- شاشة الإعدادات ---------- */
-  var APP_BUILD='b15';
+  var APP_BUILD='b16';
   async function checkBuild(){
     try{
       if(stView.fv||settingsDraft) return;
@@ -971,7 +972,7 @@ details.st .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:14px
           if(ok(v)){ act+=v; var p=Math.min(v/t.cap,1); bar.style.width=(p*100)+'%'; bar.className=barCls(p,t); } else { complete=false; bar.style.width='0'; }
         });
         var box=document.getElementById('calc_'+i);
-        if(!ok(r.sales[f])||!complete){ box.innerHTML='<div><div class="k">الحساب</div><div class="val">أدخل المبيعات وقراءات الخزانات</div></div>'; return; }
+        if(!ok(r.sales[f])||!complete){ box.innerHTML=''; return; }
         var recv=rsum, exp=prev+recv-r.sales[f], diff=act-exp, bad=over(diff), pdte=prevDate(st.id,d), gap=pdte!==null&&diffDays(d,pdte)>1;
         box.innerHTML='<div><div class="k">المتوقع</div><div class="val num">'+fmt(exp)+'</div></div>'
           +'<div><div class="k">الشيش</div><div class="val num">'+fmt(act)+'</div></div>'
